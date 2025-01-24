@@ -3,6 +3,7 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import profilesRoutes from "./routes/profiles";
 import createServicesRouter from "./routes/services";
+import authRoutes from "./routes/auth";
 import http from "http";
 import connectDB from "./config/db";
 import WebSocketManager from "./websockets/websocketServer";
@@ -27,6 +28,7 @@ app.get("/", (req, res) => {
   res.send("WebSocket server is running!");
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/profiles", profilesRoutes(websocketManager, monitoredNamespaces));
 app.use("/api/services", createServicesRouter(websocketManager));
 app.use("/api/testing-profiles", testingProfilesRoutes);

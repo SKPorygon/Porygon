@@ -9,6 +9,7 @@ export interface ITestingProfile extends Document {
       desiredVersion: string;
     }[];
     isActive: boolean;
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     createdAt: Date;
     updatedAt: Date;
   }

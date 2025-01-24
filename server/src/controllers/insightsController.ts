@@ -1,4 +1,3 @@
-// controllers/insightsController.ts
 import Insights from "../models/Insights";
 import { Request, Response } from "express";
 

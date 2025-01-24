@@ -6,7 +6,8 @@ export interface IProfile extends Document {
   name: string;
   namespace: string;
   services: IService[];
-  testingProfiles: Types.ObjectId[]; // References to TestingProfile documents
+  testingProfiles: Types.ObjectId[];
+  admins: Types.ObjectId[];
   clusterUrl: string;
   saToken: string;
 }
@@ -27,6 +28,7 @@ const ProfileSchema = new Schema<IProfile>(
       },
     ],
     testingProfiles: [{ type: Schema.Types.ObjectId, ref: "TestingProfile" }],
+    admins: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     clusterUrl: { type: String, required: true },
     saToken: { type: String, required: true },
   },
