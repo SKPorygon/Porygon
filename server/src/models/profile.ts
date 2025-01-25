@@ -1,13 +1,22 @@
 import { IService } from "./Service";
 import mongoose, { Schema, Document, Types } from "mongoose";
 
+const permissionSchema = new mongoose.Schema({
+  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  role: { type: String, enum: ["viewer", "editor", "admin"], required: true },
+});
 
 export interface IProfile extends Document {
   name: string;
   namespace: string;
   services: IService[];
   testingProfiles: Types.ObjectId[];
-  admins: Types.ObjectId[];
+  permissions: [
+    {
+      user: Types.ObjectId; // ID of the user allowed access
+      role: String; // e.g., 'admin', 'editor', 'viewer'
+    }
+  ];
   clusterUrl: string;
   saToken: string;
 }
@@ -28,7 +37,7 @@ const ProfileSchema = new Schema<IProfile>(
       },
     ],
     testingProfiles: [{ type: Schema.Types.ObjectId, ref: "TestingProfile" }],
-    admins: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    permissions: [permissionSchema],
     clusterUrl: { type: String, required: true },
     saToken: { type: String, required: true },
   },

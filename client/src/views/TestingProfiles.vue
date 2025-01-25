@@ -2,7 +2,9 @@
   <div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12">
     <div class="container mx-auto max-w-7xl px-4">
       <!-- Header Section -->
-      <div class="mb-10 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
+      <div
+        class="mb-10 flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0"
+      >
         <div>
           <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">
             Testing Profiles
@@ -12,7 +14,7 @@
             Streamline and control your testing environments with precision
           </p>
         </div>
-        
+
         <div class="flex flex-col md:flex-row gap-4 w-full md:w-auto">
           <!-- Search Input -->
           <div class="relative flex-grow">
@@ -22,13 +24,26 @@
               placeholder="Search profiles by name or namespace..."
               class="w-full rounded-xl border-2 border-gray-300 bg-white px-4 py-3 pl-12 transition duration-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-            <div class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <div
+              class="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
               </svg>
             </div>
           </div>
-          
+
           <!-- Status Dropdown -->
           <select
             v-model="filterStatus"
@@ -52,9 +67,11 @@
             <!-- Profile Header -->
             <div class="flex items-center justify-between mb-4">
               <div>
-                <h2 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <h2
+                  class="text-2xl font-bold text-gray-900 flex items-center gap-2"
+                >
                   {{ profile.name }}
-                  <span 
+                  <span
                     v-if="hasActiveTests(profile)"
                     class="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded-full"
                   >
@@ -65,38 +82,42 @@
                   Namespace: {{ profile.namespace }}
                 </p>
               </div>
-              
+
               <div class="flex space-x-2">
-                <button 
+                <button
                   @click="openExpandedModal(profile)"
                   class="rounded-lg bg-blue-50 text-blue-600 px-3 py-2 hover:bg-blue-100 transition"
                 >
                   Details
                 </button>
-                <button 
+                <button
                   @click="toggleExpand(profile._id)"
                   class="rounded-full bg-gray-100 p-2 text-gray-500 hover:bg-gray-200 transition"
                 >
-                  <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    class="h-5 w-5 transform transition-transform" 
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5 transform transition-transform"
                     :class="{ 'rotate-180': expandedProfiles[profile._id] }"
-                    viewBox="0 0 24 24" 
-                    fill="none" 
+                    viewBox="0 0 24 24"
+                    fill="none"
                     stroke="currentColor"
                   >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 9l-7 7-7-7"
+                    />
                   </svg>
                 </button>
               </div>
             </div>
 
             <!-- Expanded Content -->
-            <div 
-              v-if="expandedProfiles[profile._id]" 
+            <div
+              v-if="expandedProfiles[profile._id]"
               class="mt-6 space-y-4 transition-all duration-300 ease-in-out"
             >
-
               <div v-if="profile.testingProfiles.length > 0">
                 <h3 class="mb-3 text-lg font-medium text-gray-900">
                   Testing Profiles
@@ -117,7 +138,9 @@
                   </span>
                   <button
                     class="px-4 py-2 bg-gray-100 text-gray-600 rounded-md disabled:opacity-50"
-                    :disabled="currentPage(profile._id) === totalPages(profile._id)"
+                    :disabled="
+                      currentPage(profile._id) === totalPages(profile._id)
+                    "
                     @click="nextPage(profile._id)"
                   >
                     Next
@@ -237,6 +260,7 @@
 <script>
 import { ref, reactive, computed, onMounted } from "vue";
 import { useToast } from "vue-toastification";
+import { useUserStore } from "../store/userStore";
 import ExpandedProfileCard from "../components/ExpandedProfileCard.vue";
 import CreateTestingProfileModal from "../components/testingProfiles/CreateTestingProfileModal.vue";
 
@@ -254,13 +278,18 @@ export default {
     const expandedTestProfiles = reactive({});
     const currentPages = reactive({});
     const pageSize = 3;
-
+    const userStore = useUserStore();
     const searchQuery = ref("");
     const filterStatus = ref("all");
 
     const fetchProfiles = async () => {
       try {
-        const response = await fetch("http://localhost:3000/api/profiles");
+        const response = await fetch("http://localhost:3000/api/profiles", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${userStore.token}`,
+          },
+        });
         if (response.ok) {
           profiles.value = await response.json();
         } else {
@@ -366,7 +395,13 @@ export default {
 
         if (response.ok) {
           const updatedProfileResponse = await fetch(
-            `http://localhost:3000/api/profiles/${profile._id}`
+            `http://localhost:3000/api/profiles/${profile._id}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${userStore.token}`,
+              },
+            }
           );
           if (!updatedProfileResponse.ok) {
             toast.error("Failed to fetch updated profile data.");
@@ -524,7 +559,8 @@ export default {
 }
 
 /* Focus States */
-input:focus, select:focus {
+input:focus,
+select:focus {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
@@ -552,7 +588,8 @@ button:hover {
 
 /* Shadow and Hover Enhancements */
 .hover\:shadow-md:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 /* Card Transition */
@@ -567,7 +604,7 @@ button:hover {
   .flex-col {
     flex-direction: column;
   }
-  
+
   .w-full {
     width: 100%;
   }

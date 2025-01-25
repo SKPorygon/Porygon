@@ -13,6 +13,7 @@
           class="hidden md:flex space-x-4 absolute left-1/2 transform -translate-x-1/2"
         >
           <router-link
+          v-if="userStore.user"
             to="/"
             class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition"
             active-class="bg-blue-700"
@@ -20,6 +21,7 @@
             Home
           </router-link>
           <router-link
+          v-if="userStore.user"
             to="/profiles"
             class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition"
             active-class="bg-blue-700"
@@ -27,6 +29,7 @@
             Profiles
           </router-link>
           <router-link
+          v-if="userStore.user"
             to="/manage-testing"
             class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition"
             active-class="bg-blue-700"
@@ -34,6 +37,7 @@
             Manage Testing
           </router-link>
           <router-link
+          v-if="userStore.user"
             to="/upload"
             class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition"
             active-class="bg-blue-700"
@@ -51,7 +55,7 @@
         </router-link>
         <div
           v-else
-          @click="userStore.logout"
+          @click="logoutUser"
           class="px-3 py-1 text-sm font-medium rounded-md justify-end hover:bg-blue-600 transition"
           active-class="bg-blue-700"
         >
@@ -117,6 +121,12 @@ export default defineComponent({
 
     return { isMenuOpen, toggleMenu, userStore };
   },
+  methods: {
+    logoutUser() {
+      this.userStore.logout();
+      this.$router.push("/");
+    }
+  }
 });
 </script>
 

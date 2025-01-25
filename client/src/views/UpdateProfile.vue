@@ -48,9 +48,15 @@
           <table class="w-full border-collapse">
             <thead class="bg-gray-200">
               <tr>
-                <th class="border border-gray-300 p-2 text-left">Service Name</th>
-                <th class="border border-gray-300 p-2 text-left">Desired Version</th>
-                <th class="border border-gray-300 p-2 text-left">Desired Pods</th>
+                <th class="border border-gray-300 p-2 text-left">
+                  Service Name
+                </th>
+                <th class="border border-gray-300 p-2 text-left">
+                  Desired Version
+                </th>
+                <th class="border border-gray-300 p-2 text-left">
+                  Desired Pods
+                </th>
                 <th class="border border-gray-300 p-2 text-left">Actions</th>
               </tr>
             </thead>
@@ -168,6 +174,7 @@
 import { defineComponent, ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useToast } from "vue-toastification";
+import { useUserStore } from "../store/userStore";
 
 export default defineComponent({
   name: "UpdateProfile",
@@ -175,6 +182,7 @@ export default defineComponent({
     const route = useRoute();
     const router = useRouter();
     const toast = useToast();
+    const userStore = useUserStore();
 
     const profile = ref({
       name: "",
@@ -191,7 +199,13 @@ export default defineComponent({
     const fetchProfile = async () => {
       try {
         const response = await fetch(
-          `http://localhost:3000/api/profiles/${route.params.id}`
+          `http://localhost:3000/api/profiles/${route.params.id}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+            },
+          }
         );
         if (response.ok) {
           profile.value = await response.json();
@@ -224,7 +238,10 @@ export default defineComponent({
           `http://localhost:3000/api/profiles/${route.params.id}`,
           {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify(profile.value),
           }
         );

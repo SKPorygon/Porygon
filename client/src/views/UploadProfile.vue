@@ -35,7 +35,6 @@
         @update-service="updateService"
       />
 
-      
       <!-- Toggle Pod Count -->
       <div class="mt-6 mb-4">
         <label class="flex items-center space-x-2">
@@ -74,11 +73,13 @@ import { defineComponent, reactive, ref, onMounted } from "vue";
 import { useToast } from "vue-toastification";
 import ProfileDetails from "../components/uploadProfile/ProfileDetails.vue";
 import ServicesTable from "../components/uploadProfile/ServicesTable.vue";
+import { useUserStore } from "../store/userStore";
 
 export default defineComponent({
   components: { ProfileDetails, ServicesTable },
   setup() {
     const toast = useToast();
+    const userStore = useUserStore();
 
     const profile = reactive({
       name: "",
@@ -133,7 +134,10 @@ export default defineComponent({
       try {
         const response = await fetch("http://localhost:3000/api/services", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            Authorization: `Bearer ${userStore.token}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             namespace: profile.namespace,
             userToken: profile.userToken,
@@ -226,7 +230,10 @@ export default defineComponent({
       try {
         const response = await fetch("http://localhost:3000/api/profiles", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            Authorization: `Bearer ${userStore.token}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify(profile),
         });
         if (response.ok) {

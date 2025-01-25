@@ -4,9 +4,11 @@ import { checkUserPermissions, setupNamespaceAccessWithUserAuth } from "../servi
 import { createFullyUpdatedProfile } from "../services/ProfilesService";
 import WebSocketManager from "../websockets/websocketServer";
 import { monitorOpenShiftChanges } from "../utils/openshiftPoller";
+import { MyUserRequest } from "src/express";
+import User from "../models/User";
 
 // Fetch a single profile by ID
-export const getProfileById = async (req: Request<{ id: string }>, res: Response) => {
+export const getProfileById = async (req: MyUserRequest, res: Response) => {
   const { id } = req.params;
 
   try {
@@ -46,9 +48,13 @@ export const updateProfile = async (req: Request<{ id: string }>, res: Response)
 };
 
 // Fetch all profiles
-export const getProfiles = async (req: Request, res: Response) => {
+export const getProfiles = async (req: MyUserRequest, res: Response) => {
   try {
-    const profiles = await Profile.find().populate("testingProfiles");
+    const userId = req.userId;
+
+    const profiles = await Profile.find({
+      "permissions": { $elemMatch: { user: userId } },
+    }).populate("testingProfiles");
 
     // Optionally, enrich profiles if needed
     const enrichedProfiles = await Promise.all(
@@ -66,7 +72,7 @@ export const getProfiles = async (req: Request, res: Response) => {
 
 // Create a new profile
 export const createProfile = async (
-  req: Request,
+  req: MyUserRequest,
   res: Response,
   websocketManager: WebSocketManager,
   monitoredNamespaces: Set<string>
@@ -103,6 +109,11 @@ export const createProfile = async (
         podCount: service.podCount ?? 1,
       }));
 
+      const creatorPermissions = {
+        user: req.userId,
+        role: "admin"
+      }
+
       // Create the profile in the database
       const profile = await Profile.create({
         name,
@@ -111,6 +122,7 @@ export const createProfile = async (
         clusterUrl,
         saToken,
         testingProfiles: [],
+        permissions: [creatorPermissions]
       });
 
       // Optionally monitor the namespace for changes
@@ -127,3 +139,115 @@ export const createProfile = async (
     res.status(500).json({ error: "Failed to create profile" });
   }
 };
+
+// Get permissions for a specific profile
+export const getProfilePermissions = async (req: MyUserRequest, res: Response) => {
+  try {
+    const { profileId } = req.params;
+
+    const profile = await Profile.findById(profileId).populate("permissions.user", "name email");
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    return res.status(200).json(profile.permissions);
+  } catch (error) {
+    console.error("Error fetching permissions:", error);
+    return res.status(500).json({ error: "An error occurred while fetching permissions." });
+  }
+};
+
+// Add a user to the profile
+export const addUserToProfile = async (req: MyUserRequest, res: Response) => {
+  try {
+    const { profileId } = req.params;
+    const { name, role } = req.body;
+
+    console.log("yo in ze add user wiz: " + name +" " + role +" " + profileId)
+    if (!name || !role) {
+      return res.status(400).json({ error: "Full name and role are required." });
+    }
+
+    const user = await User.findOne({ name: name });
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const profile = await Profile.findById(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found." });
+    }
+
+    // Check if the user is already in the permissions list
+    const existingPermission = profile.permissions.find((perm) => perm.user.toString() === user._id.toString());
+    if (existingPermission) {
+      return res.status(400).json({ error: "User is already a member of this profile." });
+    }
+
+    // Add the user to the profile permissions
+    profile.permissions.push({ user: user._id, role });
+    await profile.save();
+
+    return res.status(201).json({ user: { name: user.name, id: user._id }, role });
+  } catch (error) {
+    console.error("Error adding user to profile:", error);
+    return res.status(500).json({ error: "An error occurred while adding the user." });
+  }
+};
+
+// Update a user's role in the profile
+export const updateUserRole = async (req: MyUserRequest, res: Response) => {
+  try {
+    const { profileId, userId } = req.params;
+    const { role } = req.body;
+
+    if (!role) {
+      return res.status(400).json({ error: "Role is required." });
+    }
+
+    const profile = await Profile.findById(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found." });
+    }
+
+    const permission = profile.permissions.find((perm) => perm.user.toString() === userId);
+    if (!permission) {
+      return res.status(404).json({ error: "User not found in this profile's permissions." });
+    }
+
+    permission.role = role;
+    await profile.save();
+
+    return res.status(200).json({ message: "User role updated successfully." });
+  } catch (error) {
+    console.error("Error updating user role:", error);
+    return res.status(500).json({ error: "An error occurred while updating the user's role." });
+  }
+};
+
+// Remove a user from the profile
+export const removeUserFromProfile = async (req: MyUserRequest, res: Response) => {
+  try {
+    const { profileId, userId } = req.params;
+
+    const profile = await Profile.findById(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found." });
+    }
+
+    const permissionIndex = profile.permissions.findIndex((perm) => perm.user.toString() === userId);
+    if (permissionIndex === -1) {
+      return res.status(404).json({ error: "User not found in this profile's permissions." });
+    }
+
+    // Remove the user from the permissions list
+    profile.permissions.splice(permissionIndex, 1);
+    await profile.save();
+
+    return res.status(200).json({ message: "User removed from the profile." });
+  } catch (error) {
+    console.error("Error removing user from profile:", error);
+    return res.status(500).json({ error: "An error occurred while removing the user." });
+  }
+};
+

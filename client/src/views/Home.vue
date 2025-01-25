@@ -15,7 +15,7 @@
             effortless management.
           </p>
           <router-link
-            to="/upload"
+            :to="userStore.user ? `/upload`: `/sign-up`"
             class="cta-button px-6 py-3 font-semibold rounded shadow"
           >
             Get Started

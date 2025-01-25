@@ -190,6 +190,7 @@
 import { defineComponent, ref, computed, onMounted } from "vue";
 import { useToast } from "vue-toastification";
 import ProfileCard from "../components/profileList/ProfileCard.vue";
+import { useUserStore } from "../store/userStore";
 
 export default defineComponent({
   components: { ProfileCard },
@@ -200,12 +201,14 @@ export default defineComponent({
     const searchQuery = ref("");
     const showOutOfSyncOnly = ref(false);
     const showTestingOnly = ref(false);
+    const userStore = useUserStore();
 
     // Enhanced data fetching with error handling
     const fetchProfiles = async () => {
       try {
         const response = await fetch("http://localhost:3000/api/profiles", {
           headers: {
+            Authorization: `Bearer ${userStore.token}`,
             "Cache-Control": "no-cache",
             Pragma: "no-cache",
             Expires: "0",
