@@ -1,10 +1,14 @@
 <template>
-  <div class="profile-card bg-white shadow-lg rounded-xl overflow-hidden transition-all duration-300 hover:shadow-xl">
+  <div
+    class="profile-card bg-white shadow-lg rounded-xl overflow-hidden transition-all duration-300 hover:shadow-xl"
+  >
     <!-- Header Section -->
     <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-6">
       <div class="flex justify-between items-center">
         <div>
-          <h2 class="text-2xl font-semibold text-gray-800">{{ profile.name }}</h2>
+          <h2 class="text-2xl font-semibold text-gray-800">
+            {{ profile.name }}
+          </h2>
           <div class="flex items-center space-x-2 mt-1">
             <span class="text-gray-500 text-sm">
               <i class="fas fa-layer-group mr-1"></i>
@@ -16,14 +20,20 @@
             </span>
           </div>
         </div>
-        
-        <button 
-          @click="toggleDetails" 
+
+        <button
+          @click="toggleDetails"
           class="btn-toggle text-blue-600 hover:text-blue-800 transition-colors"
         >
           <span class="flex items-center">
             {{ showDetails ? "Hide Details" : "View Details" }}
-            <i :class="showDetails ? 'fas fa-chevron-up ml-2' : 'fas fa-chevron-down ml-2'"></i>
+            <i
+              :class="
+                showDetails
+                  ? 'fas fa-chevron-up ml-2'
+                  : 'fas fa-chevron-down ml-2'
+              "
+            ></i>
           </span>
         </button>
       </div>
@@ -31,21 +41,25 @@
 
     <!-- Synchronization Status -->
     <div class="px-6 py-3 bg-gray-50 border-b">
-      <div 
+      <div
         :class="[
           'p-2 rounded-md text-sm flex items-center',
-          outOfSyncCount > 0 
-            ? 'bg-red-50 text-red-600' 
-            : 'bg-green-50 text-green-600'
+          outOfSyncCount > 0
+            ? 'bg-red-50 text-red-600'
+            : 'bg-green-50 text-green-600',
         ]"
       >
-        <i :class="outOfSyncCount > 0 
-          ? 'fas fa-exclamation-triangle mr-2' 
-          : 'fas fa-check-circle mr-2'"
+        <i
+          :class="
+            outOfSyncCount > 0
+              ? 'fas fa-exclamation-triangle mr-2'
+              : 'fas fa-check-circle mr-2'
+          "
         ></i>
-        {{ outOfSyncCount > 0 
-          ? `${outOfSyncCount} service(s) are out of sync` 
-          : 'All services are in sync' 
+        {{
+          outOfSyncCount > 0
+            ? `${outOfSyncCount} service(s) are out of sync`
+            : "All services are in sync"
         }}
       </div>
     </div>
@@ -59,28 +73,32 @@
     />
 
     <!-- Action Buttons -->
-    <div class="p-6 bg-gray-100 flex justify-between items-center">
-      <div class="flex space-x-3">
+    <div
+      class="p-6 bg-gray-100 flex flex-col md:flex-row md:justify-between items-center space-y-3 md:space-y-0"
+    >
+      <div
+        class="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-3 w-full md:w-auto"
+      >
         <button
           @click="$emit('sync-all', profile.name)"
-          class="btn btn-success flex items-center"
+          class="btn btn-success flex items-center justify-center"
         >
           <i class="fas fa-sync mr-2"></i>
           Sync All
         </button>
-        
+
         <router-link
           :to="`/profiles/update/${profile._id}`"
-          class="btn btn-primary flex items-center"
+          class="btn btn-primary flex items-center justify-center"
         >
           <i class="fas fa-edit mr-2"></i>
           Edit Profile
         </router-link>
       </div>
-      
+
       <button
         @click="openPermissionsModal"
-        class="btn btn-accent flex items-center"
+        class="btn btn-accent flex items-center justify-center w-full md:w-auto"
       >
         <i class="fas fa-user-shield mr-2"></i>
         Manage Permissions
@@ -128,7 +146,13 @@ export default {
       ).length;
     });
 
-    return { showDetails, toggleDetails, showPermissionsModal, openPermissionsModal, outOfSyncCount };
+    return {
+      showDetails,
+      toggleDetails,
+      showPermissionsModal,
+      openPermissionsModal,
+      outOfSyncCount,
+    };
   },
 };
 </script>
@@ -157,5 +181,12 @@ export default {
 /* Card hover and transition effects */
 .profile-card {
   @apply transform transition-all duration-300 hover:-translate-y-1;
+}
+
+/* Responsive spacing for action buttons */
+@media (max-width: 768px) {
+  .btn {
+    @apply w-full;
+  }
 }
 </style>
