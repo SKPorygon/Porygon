@@ -8,6 +8,7 @@ import UpdateProfile from '../views/UpdateProfile.vue';
 import TestingProfiles from '../views/TestingProfiles.vue';
 import Login from '../views/Login.vue';
 import Signup from '../views/Signup.vue';
+import Logs from '../views/Logs.vue';
 
 const routes = [
   { path: '/', name: 'Home', component: Home },
@@ -21,6 +22,12 @@ const routes = [
     path: '/profiles/update/:id', // Add the update route
     name: 'UpdateProfile',
     component: UpdateProfile,
+    props: true, // Pass route params as props to the component
+  },
+  {
+    path: '/profiles/logs/:id', // Add the update route
+    name: 'ProfileLogs',
+    component: Logs,
     props: true, // Pass route params as props to the component
   },
 ];

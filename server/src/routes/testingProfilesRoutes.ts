@@ -8,6 +8,7 @@ import {
   activateTestingProfile,
   deactivateTestingProfile
 } from "../controllers/testingProfilesController";
+import { authenticate } from "../middlewares/AuthMiddleware";
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ router.get("/", getAllTestingProfiles);
 router.post("/", createTestingProfile);
 router.put("/:id", updateTestingProfile);
 router.delete("/:id", deleteTestingProfile);
-router.post("/activate", activateTestingProfile);
-router.post("/deactivate", deactivateTestingProfile);
+router.post("/activate", authenticate, activateTestingProfile);
+router.post("/deactivate", authenticate, deactivateTestingProfile);
 
 export default router;

@@ -95,6 +95,13 @@
           <i class="fas fa-edit mr-2"></i>
           Edit Profile
         </router-link>
+        <router-link
+          :to="`/profiles/logs/${profile._id}`"
+          class="btn btn-purple flex items-center justify-center"
+        >
+        <i class="fa-regular fa-eye"></i>
+          View Activity Logs
+        </router-link>
       </div>
 
       <button
