@@ -140,7 +140,7 @@ export const createProfile = async (
       });
 
       // Optionally monitor the namespace for changes
-      monitorOpenShiftChanges(namespace, saToken, clusterUrl, websocketManager);
+      // monitorOpenShiftChanges(namespace, saToken, clusterUrl, websocketManager);
 
       res.status(201).json({ message: "Profile created successfully", profile });
     } else {

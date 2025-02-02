@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import { TestingProfile } from "../models/TestingProfile";
 import { Profile } from "../models/Profile";
+import { logAction } from "../middlewares/loggingMiddleware";
+import { MyUserRequest } from "../express";
 
 // Get all testing profiles
 export const getAllTestingProfiles = async (req: Request, res: Response) => {
@@ -53,7 +55,7 @@ export const createTestingProfile = async (req: Request, res: Response) => {
 };
 
 // Activate a testing profile
-export const activateTestingProfile = async (req: Request, res: Response) => {
+export const activateTestingProfile = async (req: MyUserRequest, res: Response) => {
   try {
     const { profileId, testingProfileId } = req.body;
 
@@ -67,6 +69,10 @@ export const activateTestingProfile = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Profile not found" });
     }
 
+    if (!req.userId) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
     if (!testingProfile) {
       return res.status(404).json({ error: "Testing profile not found" });
     }
@@ -75,13 +81,19 @@ export const activateTestingProfile = async (req: Request, res: Response) => {
     testingProfile.isActive = true;
     await testingProfile.save();
 
+    const action = testingProfile.isActive ? "Activate Testing Profile" : "Deactivate Testing Profile";
+    await logAction(req.userId, action, profileId, {
+      testingProfileId,
+      testingProfileName: testingProfile.name,
+    });
+
     profile.services.forEach((service) => {
       const testingService = testingProfile.services.find(
         (s) => s.name === service.name
       );
       if (testingService) {
-        service.previousVersion = service.version; // Backup current version
-        service.version = testingService.desiredVersion; // Update to the desired version
+        service.previousVersion = service.version;
+        service.version = testingService.desiredVersion;
       }
     });
 

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const MONGO_URI="mongodb+srv://albalakyoav:uwaZy1200pd8e1Eu@cluster.werpa.mongodb.net/"
+const MONGO_URI="mongodb+srv://albalakyoav:cvtvPpLKXa42mpU@cluster.werpa.mongodb.net/"
 
 const connectDB = async () => {
   try {

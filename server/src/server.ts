@@ -4,6 +4,7 @@ import cors from "cors";
 import profilesRoutes from "./routes/profiles";
 import createServicesRouter from "./routes/services";
 import authRoutes from "./routes/auth";
+import logsRoutes from "./routes/logs";
 import http from "http";
 import connectDB from "./config/db";
 import WebSocketManager from "./websockets/websocketServer";
@@ -32,6 +33,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profiles", profilesRoutes(websocketManager, monitoredNamespaces));
 app.use("/api/services", createServicesRouter(websocketManager));
 app.use("/api/testing-profiles", testingProfilesRoutes);
+app.use("/api/logs", logsRoutes);
 
 connectDB();
 
