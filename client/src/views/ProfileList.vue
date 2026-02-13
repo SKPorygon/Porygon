@@ -155,15 +155,21 @@
                   <h3 class="text-lg font-semibold text-gray-700 mb-2">
                     {{ testingProfile.name }}
                   </h3>
-                  <div 
-      v-for="service in testingProfile.services"
-      :key="service.name"
-      class="flex items-center justify-between rounded-lg bg-gray-50 p-2 text-sm shadow-sm"
-      :class="{'border border-blue-100': testingProfile.isActive}"
-    >
-      <span class="font-medium text-gray-700">{{ service.name }}</span>
-      <span class="text-gray-500">v{{ service.desiredVersion }}</span>
-    </div>
+                  <div
+                    v-for="service in testingProfile.services"
+                    :key="service.name"
+                    class="flex items-center justify-between rounded-lg bg-gray-50 p-2 text-sm shadow-sm"
+                    :class="{
+                      'border border-blue-100': testingProfile.isActive,
+                    }"
+                  >
+                    <span class="font-medium text-gray-700">{{
+                      service.name
+                    }}</span>
+                    <span class="text-gray-500"
+                      >v{{ service.desiredVersion }}</span
+                    >
+                  </div>
                 </div>
               </div>
             </template>
@@ -181,6 +187,14 @@
             </template>
           </div>
         </div>
+        <SyncAllConfirmModal
+          :show="showSyncAllModal"
+          :profile-name="selectedProfile?.name || ''"
+          :namespace="selectedProfile?.namespace || ''"
+          :services-to-sync="servicesToSync"
+          @confirm="confirmSyncAll"
+          @cancel="cancelSyncAll"
+        />
       </div>
     </div>
   </div>
@@ -192,9 +206,11 @@ import { useToast } from "vue-toastification";
 import ProfileCard from "../components/profileList/ProfileCard.vue";
 import { useUserStore } from "../store/userStore";
 import { getConfig } from "../config";
+import SyncAllConfirmModal from "../components/profileList/SyncAllConfirmModal.vue";
 
 export default defineComponent({
-  components: { ProfileCard },
+  components: { ProfileCard, SyncAllConfirmModal },
+
   setup() {
     const toast = useToast();
     const profiles = ref([]);
@@ -203,18 +219,30 @@ export default defineComponent({
     const showOutOfSyncOnly = ref(false);
     const showTestingOnly = ref(false);
     const userStore = useUserStore();
+    const showSyncAllModal = ref(false);
+    const selectedProfile = ref(null);
+
+    const servicesToSync = computed(() => {
+      if (!selectedProfile.value) return [];
+      return (selectedProfile.value.services || []).filter(
+        (s) => s.status !== "In Sync",
+      );
+    });
 
     // Enhanced data fetching with error handling
     const fetchProfiles = async () => {
       try {
-        const response = await fetch(`${getConfig().apiUrl}/profiles/get/enriched`, {
-          headers: {
-            Authorization: `Bearer ${userStore.token}`,
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-            Expires: "0",
+        const response = await fetch(
+          `${getConfig().apiUrl}/profiles/get/enriched`,
+          {
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           },
-        });
+        );
 
         if (response.ok) {
           const data = await response.json();
@@ -224,7 +252,7 @@ export default defineComponent({
           }));
         } else {
           toast.error(
-            "Failed to fetch profiles. Please check your connection."
+            "Failed to fetch profiles. Please check your connection.",
           );
         }
       } catch (error) {
@@ -253,7 +281,7 @@ export default defineComponent({
         result = result.filter(
           (profile) =>
             profile.name.toLowerCase().includes(query) ||
-            profile.namespace.toLowerCase().includes(query)
+            profile.namespace.toLowerCase().includes(query),
         );
       }
 
@@ -262,7 +290,7 @@ export default defineComponent({
           .map((profile) => ({
             ...profile,
             services: profile.services.filter(
-              (service) => service.status === "Out of Sync"
+              (service) => service.status === "Out of Sync",
             ),
           }))
           .filter((profile) => profile.services.length > 0);
@@ -273,25 +301,22 @@ export default defineComponent({
 
     const syncService = async (profile, service) => {
       try {
-        const response = await fetch(
-          `${getConfig().apiUrl}/services/sync`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              namespace: profile.namespace,
-              serviceName: service.name,
-              actualVersion: service.actualVersion,
-              desiredVersion: service.desiredVersion,
-              desiredPodCount: service.desiredPodCount,
-              actualPodCount: service.actualPodCount,
-              saToken: profile.saToken,
-              clusterUrl: profile.clusterUrl,
-            }),
-          }
-        );
+        const response = await fetch(`${getConfig().apiUrl}/services/sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            namespace: profile.namespace,
+            serviceName: service.name,
+            actualVersion: service.actualVersion,
+            desiredVersion: service.desiredVersion,
+            desiredPodCount: service.desiredPodCount,
+            actualPodCount: service.actualPodCount,
+            saToken: profile.saToken,
+            clusterUrl: profile.clusterUrl,
+          }),
+        });
 
         if (response.ok) {
           toast.success(`Successfully synced ${service.name}`);
@@ -299,7 +324,7 @@ export default defineComponent({
         } else {
           const errorData = await response.json();
           toast.error(
-            `Failed to sync service: ${errorData.error || "Unknown error"}`
+            `Failed to sync service: ${errorData.error || "Unknown error"}`,
           );
         }
       } catch (error) {
@@ -307,17 +332,51 @@ export default defineComponent({
       }
     };
 
-    const syncAllServices = async (profileName) => {
+    const syncAllServices = (profileName) => {  
       const profile = profiles.value.find((p) => p.name === profileName);
-      if (profile) {
-        const syncPromises = profile.services
-          .filter((service) => service.status !== "In Sync")
-          .map((service) => syncService(profile, service));
+      if (!profile) return;
 
-        await Promise.all(syncPromises);
-        toast.success(`Synced all services in ${profileName}`);
-      }
+      selectedProfile.value = profile;
+      showSyncAllModal.value = true;
     };
+
+    const confirmSyncAll = async (selectedNames) => {
+    const SYNC_DELAY_MS = 8000;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      if (!selectedProfile.value) return;
+
+      showSyncAllModal.value = false;
+
+      const profile = selectedProfile.value;
+
+      const targets = profile.services
+        .filter((s) => (s.status ?? "Out of Sync") !== "In Sync")
+        .filter((s) => selectedNames.includes(s.name));
+
+      if (targets.length === 0) {
+        toast.info("No services selected.");
+        selectedProfile.value = null;
+        return;
+      }
+
+      for (const service of targets) {
+        await syncService(profile, service);
+
+        if (service !== targets[targets.length - 1]) {
+          await sleep(SYNC_DELAY_MS);
+        }
+      }
+
+      toast.success(`Synced ${targets.length} service(s) in ${profile.name}`);
+      selectedProfile.value = null;
+    };
+
+    const cancelSyncAll = () => {
+      showSyncAllModal.value = false;
+      selectedProfile.value = null;
+    };
+
     onMounted(fetchProfiles);
 
     return {
@@ -331,6 +390,11 @@ export default defineComponent({
       filteredProfiles,
       syncService,
       syncAllServices,
+      showSyncAllModal,
+      selectedProfile,
+      servicesToSync,
+      confirmSyncAll,
+      cancelSyncAll,
     };
   },
 });
