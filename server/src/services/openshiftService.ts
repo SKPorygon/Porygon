@@ -42,78 +42,27 @@ export const checkUserPermissions = async (
   return data.status.allowed === true;
 };
 
+const extractTagFromImage = (image: string): string => {
+  // drop digest
+  const withoutDigest = image.split("@")[0];
+
+  const lastSlash = withoutDigest.lastIndexOf("/");
+  const lastColon = withoutDigest.lastIndexOf(":");
+
+  const hasTag = lastColon > lastSlash;
+  if (!hasTag) return "latest";
+
+  return withoutDigest.slice(lastColon + 1);
+};
+
 export const getServicesActualVersions = async (
   namespace: string,
   saToken: string,
   clusterUrl: string
-): Promise<
-  Record<
-    string,
-    {
-      version: string;
-      podCount: number;
-    }
-  >
-> => {
+): Promise<Record<string, { version: string; podCount: number }>> => {
   console.log("Fetching actual versions for namespace:", namespace);
 
-  // Fetch pods in the namespace
-  const podResponse = await fetch(
-    `${clusterUrl}/api/v1/namespaces/${namespace}/pods`,
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${saToken}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
-  if (!podResponse.ok) {
-    throw new Error(`Failed to fetch pods: ${podResponse.statusText}`);
-  }
-
-  const podData = await podResponse.json();
-  const versions: Record<
-    string,
-    {
-      version: string;
-      podCount: number;
-    }
-  > = {};
-
-  const unterminatedPods = podData.items.filter(
-    (pod: {
-      metadata: { deletionTimestamp: any };
-      status: { phase: string };
-    }) =>
-      !pod.metadata.deletionTimestamp && pod.status.phase !== "Terminating"
-  );
-
-  // Process pod data
-  unterminatedPods.forEach((pod: any) => {
-    const serviceName =
-      pod.metadata.labels?.["app"] ||
-      pod.metadata.labels?.["controller.devfile.io/devworkspace_name"] ||
-      pod.metadata.labels?.["controller.devfile.io/devworkspace_id"] ||
-      pod.metadata.name;
-
-    const image = pod.spec.containers[0]?.image || "unknown";
-    const version = image.includes("@sha256:")
-      ? "digest-based"
-      : image.includes(":")
-      ? image.split(":")[1]
-      : "latest";
-
-    const podCount = (versions[serviceName]?.podCount || 0) + 1;
-
-    versions[serviceName] = {
-      version,
-      podCount,
-    };
-  });
-
-  // Fetch deployments to handle services with zero pods
+  // Fetch deployments (source of truth)
   const deploymentResponse = await fetch(
     `${clusterUrl}/apis/apps/v1/namespaces/${namespace}/deployments`,
     {
@@ -126,37 +75,40 @@ export const getServicesActualVersions = async (
   );
 
   if (!deploymentResponse.ok) {
-    throw new Error(
-      `Failed to fetch deployments: ${deploymentResponse.statusText}`
-    );
+    throw new Error(`Failed to fetch deployments: ${deploymentResponse.statusText}`);
   }
 
   const deploymentData = await deploymentResponse.json();
 
-  deploymentData.items.forEach((deployment: any) => {
-    const serviceName =
-      deployment.metadata.labels?.["app"] || deployment.metadata.name;
+  const versions: Record<string, { version: string; podCount: number }> = {};
 
-    if (!versions[serviceName]) {
-      const containers = deployment.spec.template.spec.containers || [];
-      const image = containers[0]?.image || "unknown";
-      const version = image.includes("@sha256:")
-        ? "digest-based"
-        : image.includes(":")
-        ? image.split(":")[1]
-        : "latest";
+  for (const deployment of deploymentData.items ?? []) {
+    const deploymentName = deployment?.metadata?.name;
+    if (!deploymentName) continue;
 
-      // Fallback to 0 pod count for deployments without running pods
-      versions[serviceName] = {
-        version,
-        podCount: 0,
-      };
-    }
-  });
+    const containers = deployment?.spec?.template?.spec?.containers ?? [];
+    const image = containers?.[0]?.image || "unknown";
 
-  console.log("Computed service versions and pod counts:", versions);
+    const version = image === "unknown" ? "unknown" : extractTagFromImage(image);
+
+    // Prefer readyReplicas (actual running+ready pods)
+    const ready = deployment?.status?.readyReplicas;
+    const available = deployment?.status?.availableReplicas;
+
+    const podCount =
+      typeof ready === "number"
+        ? ready
+        : typeof available === "number"
+        ? available
+        : 0;
+
+    versions[deploymentName] = { version, podCount };
+  }
+
+  console.log("Computed deployment versions and pod counts:", versions);
   return versions;
 };
+
 
 export const setupNamespaceAccessWithUserAuth = async (
   namespace: string,
@@ -483,6 +435,45 @@ export const createServiceAccountTokenWithUserAuth = async (
   });
 };
 
+type ParsedImage = {
+  hasDigest: boolean;
+  digest?: string; // sha256:...
+  repoPart: string; // without tag/digest, e.g. quay.io/org/app
+  tag?: string; // e.g. 1.0.0
+  hasTag: boolean;
+};
+
+const parseContainerImage = (image: string): ParsedImage => {
+  const [withoutDigest, digest] = image.split("@");
+  const hasDigest = image.includes("@") && !!digest;
+
+  const lastSlash = withoutDigest.lastIndexOf("/");
+  const lastColon = withoutDigest.lastIndexOf(":");
+
+  // If last ":" is after last "/", it's a tag separator (not a registry port)
+  const hasTag = lastColon > lastSlash;
+
+  const repoPart = hasTag ? withoutDigest.slice(0, lastColon) : withoutDigest;
+  const tag = hasTag ? withoutDigest.slice(lastColon + 1) : undefined;
+
+  return { hasDigest, digest, repoPart, tag, hasTag };
+};
+
+/**
+ * Replace only the tag while preserving repo/registry path.
+ * If current image has a digest, we drop it and use tag-based image (simplest stable behavior).
+ */
+const withReplacedTag = (currentImage: string, newTag: string): string => {
+  const parsed = parseContainerImage(currentImage);
+  return `${parsed.repoPart}:${newTag}`;
+};
+
+const findContainerIndexByName = (
+  containers: Array<{ name: string; image: string }>,
+  containerName: string
+): number => containers.findIndex((c) => c.name === containerName);
+
+
 export const syncService = async (
   namespace: string,
   serviceName: string,
@@ -492,10 +483,11 @@ export const syncService = async (
   clusterUrl: string,
   websocketManager: WebSocketManager
 ) => {
+  websocketManager.broadcast("SYNC_STARTED", { namespace, serviceName });
+
   try {
     const deploymentUrl = `${clusterUrl}/apis/apps/v1/namespaces/${namespace}/deployments/${serviceName}`;
 
-    // Fetch current deployment
     const currentDeployment = await axios.get(deploymentUrl, {
       headers: {
         Authorization: `Bearer ${saToken}`,
@@ -503,18 +495,40 @@ export const syncService = async (
       },
     });
 
-    const currentImage =
-      currentDeployment.data.spec.template.spec.containers[0].image;
-    const currentPodCount = currentDeployment.data.spec.replicas;
+    const containers =
+      currentDeployment.data?.spec?.template?.spec?.containers ?? [];
 
-    // Sync version if needed
-    if (currentImage !== `${serviceName}:${desiredVersion}`) {
-      console.log(`Syncing version for ${serviceName} to ${desiredVersion}`);
+    if (!Array.isArray(containers) || containers.length === 0) {
+      throw new Error(`Deployment "${serviceName}" has no containers.`);
+    }
+
+    let containerIndex = findContainerIndexByName(containers, serviceName);
+    if (containerIndex === -1) {
+      console.warn(
+        `Container "${serviceName}" not found in deployment "${serviceName}". Falling back to containers[0].`
+      );
+      containerIndex = 0;
+    }
+
+    const currentImage = containers[containerIndex].image as string;
+    const desiredImage = withReplacedTag(currentImage, desiredVersion);
+
+    const currentPodCount = currentDeployment.data?.spec?.replicas;
+
+    if (currentImage !== desiredImage) {
+      websocketManager.broadcast("SYNC_STEP", {
+        namespace,
+        serviceName,
+        step: "PATCHING_IMAGE",
+        from: currentImage,
+        to: desiredImage,
+      });
+
       const patchImage = [
         {
           op: "replace",
-          path: "/spec/template/spec/containers/0/image",
-          value: `${serviceName}:${desiredVersion}`,
+          path: `/spec/template/spec/containers/${containerIndex}/image`,
+          value: desiredImage,
         },
       ];
 
@@ -524,19 +538,19 @@ export const syncService = async (
           "Content-Type": "application/json-patch+json",
         },
       });
-
-      console.log(`Version synced for ${serviceName}`);
     }
 
-    // Sync pod count if needed
-    if (currentPodCount !== desiredPodCount) {
-      console.log(`Syncing pod count for ${serviceName} to ${desiredPodCount}`);
+    if (typeof currentPodCount === "number" && currentPodCount !== desiredPodCount) {
+      websocketManager.broadcast("SYNC_STEP", {
+        namespace,
+        serviceName,
+        step: "PATCHING_REPLICAS",
+        from: currentPodCount,
+        to: desiredPodCount,
+      });
+
       const patchReplicas = [
-        {
-          op: "replace",
-          path: "/spec/replicas",
-          value: desiredPodCount,
-        },
+        { op: "replace", path: "/spec/replicas", value: desiredPodCount },
       ];
 
       await axios.patch(deploymentUrl, patchReplicas, {
@@ -545,8 +559,6 @@ export const syncService = async (
           "Content-Type": "application/json-patch+json",
         },
       });
-
-      console.log(`Pod count synced for ${serviceName}`);
     }
 
     websocketManager.broadcast("SYNC_COMPLETE", {
@@ -561,19 +573,17 @@ export const syncService = async (
       actualVersion: desiredVersion,
       actualPodCount: desiredPodCount,
     });
-
-    console.log(`Service ${serviceName} synced successfully`);
-  } catch (error) {
+  } catch (error: any) {
     websocketManager.broadcast("SYNC_COMPLETE", {
       serviceName,
       namespace,
       status: "error",
-      error: error.message,
+      error: error?.message ?? String(error),
     });
-    console.error("Error in syncService:", error.message);
     throw error;
   }
 };
+
 
 // Sync a service to the desired image version
 // export const syncService = async (
