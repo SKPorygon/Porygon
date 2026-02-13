@@ -1,0 +1,16 @@
+# בונה את node_modules עבור Linux Alpine
+FROM node:20.19.1-alpine3.21
+
+WORKDIR /app
+
+# העתק את הקבצים לפני שבודקים אותם
+COPY package*.json ./
+
+# שלב דיבוג 1: הצג את הקבצים שהועתקו
+RUN ls -la
+
+# התקנת כל התלויות (דורש אינטרנט)
+RUN npm install
+
+# שלב דיבוג 2: הצג את התוכן לאחר ההתקנה (צריך לכלול את node_modules)
+RUN ls -la

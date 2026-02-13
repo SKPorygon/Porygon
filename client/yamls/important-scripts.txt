@@ -1,0 +1,155 @@
+busybox 1.34.1, 1.35.0
+
+# OpenShift `oc` Commands
+
+## Basic Cluster & User Information
+
+- **Log in to the cluster:**
+  ```bash
+  oc login --token=<your-token> --server=<cluster-url>
+  ```
+- **Check currently logged-in user:**
+  ```bash
+  oc whoami
+  ```
+- **Get the user's API token:**
+  ```bash
+  oc whoami -t
+  ```
+- **List available projects (namespaces):**
+  ```bash
+  oc projects
+  ```
+- **Switch to a specific project:**
+  ```bash
+  oc project <project-name>
+  ```
+
+## Service Accounts & RBAC
+
+- **Create a service account:**
+  ```bash
+  oc create sa <service-account-name>
+  ```
+- **Get a service account token:**
+  ```bash
+  oc create token <service-account-name> -n <namespace>
+  ```
+- **Assign a role to a service account:**
+  ```bash
+  oc create rolebinding <rolebinding-name> --role=<role-name> --serviceaccount=<namespace>:<service-account-name> -n <namespace>
+  ```
+- **Check permissions for a user or service account:**
+  ```bash
+  oc auth can-i <verb> <resource> -n <namespace>
+  ```
+
+## Pods & Deployments
+
+- **List all pods in a namespace:**
+  ```bash
+  oc get pods -n <namespace>
+  ```
+- **Get detailed information about a pod:**
+  ```bash
+  oc describe pod <pod-name> -n <namespace>
+  ```
+- **Delete a pod (e.g., to restart it):**
+  ```bash
+  oc delete pod <pod-name> -n <namespace>
+  ```
+- **Scale a deployment (change replica count):**
+  ```bash
+  oc scale deployment <deployment-name> --replicas=<count> -n <namespace>
+  ```
+- **Patch a deployment (e.g., update image):**
+  ```bash
+  oc patch deployment <deployment-name> --patch '{"spec": {"template": {"spec": {"containers": [{"name": "<container-name>", "image": "<new-image-name>"}]}}}}' -n <namespace>
+  ```
+
+## Inspecting & Debugging
+
+- **View logs for a pod:**
+  ```bash
+  oc logs <pod-name> -n <namespace>
+  ```
+- **Stream logs from a pod:**
+  ```bash
+  oc logs -f <pod-name> -n <namespace>
+  ```
+- **Open a shell session in a pod:**
+  ```bash
+  oc rsh <pod-name> -n <namespace>
+  ```
+- **Port-forward from a pod:**
+  ```bash
+  oc port-forward <pod-name> <local-port>:<pod-port> -n <namespace>
+  ```
+
+## Image Management
+
+- **List available images:**
+  ```bash
+  oc get is -n <namespace>
+  ```
+- **Tag an image:**
+  ```bash
+  oc tag <source-image>:<tag> <destination-image>:<tag>
+  ```
+- **Import an external image to an image stream:**
+  ```bash
+  oc import-image <image-name> --from=<external-image-url> --confirm
+  ```
+
+## Configuration Management
+
+- **View environment variables for a deployment:**
+  ```bash
+  oc set env deployment/<deployment-name> --list -n <namespace>
+  ```
+- **Add/update environment variables:**
+  ```bash
+  oc set env deployment/<deployment-name> <key>=<value> -n <namespace>
+  ```
+- **Delete an environment variable:**
+  ```bash
+  oc set env deployment/<deployment-name> <key>- -n <namespace>
+  ```
+
+## General Resource Management
+
+- **Get details about any resource:**
+  ```bash
+  oc get <resource-type> -n <namespace>
+  ```
+  Example:
+  ```bash
+  oc get pods,svc,deployments -n <namespace>
+  ```
+- **Describe a resource:**
+  ```bash
+  oc describe <resource-type> <resource-name> -n <namespace>
+  ```
+- **Delete a resource:**
+  ```bash
+  oc delete <resource-type> <resource-name> -n <namespace>
+  ```
+- **Apply or update a YAML file:**
+  ```bash
+  oc apply -f <file.yaml> -n <namespace>
+  ```
+
+## Troubleshooting
+
+- **Run a dry-run to preview changes:**
+  ```bash
+  oc create -f <file.yaml> --dry-run=client
+  ```
+- **View events in a namespace:**
+  ```bash
+  oc get events -n <namespace>
+  ```
+- **Check resource usage (CPU, memory):**
+  ```bash
+  oc adm top pod -n <namespace>
+  

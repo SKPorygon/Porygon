@@ -1,0 +1,33 @@
+{
+  "name": "Porygon-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@heroicons/vue": "^2.2.0",
+    "@vueuse/core": "^12.4.0",
+    "lodash.debounce": "^4.0.8",
+    "pinia": "^2.3.1",
+    "vee-validate": "^4.15.0",
+    "vue": "^3.5.13",
+    "vue-json-pretty": "^2.4.0",
+    "vue-router": "^4.5.0",
+    "vue-toastification": "^2.0.0-rc.5",
+    "yup": "^1.6.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/tsconfig": "^0.7.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.5",
+    "vue-tsc": "^2.2.0"
+  }
+}
