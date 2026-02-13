@@ -187,15 +187,14 @@
             </template>
           </div>
         </div>
-<SyncAllConfirmModal
-  :show="showSyncAllModal"
-  :profile-name="selectedProfile?.name || ''"
-  :namespace="selectedProfile?.namespace || ''"
-  :services-to-sync="servicesToSync"
-  @confirm="confirmSyncAll"
-  @cancel="cancelSyncAll"
-/>
-
+        <SyncAllConfirmModal
+          :show="showSyncAllModal"
+          :profile-name="selectedProfile?.name || ''"
+          :namespace="selectedProfile?.namespace || ''"
+          :services-to-sync="servicesToSync"
+          @confirm="confirmSyncAll"
+          @cancel="cancelSyncAll"
+        />
       </div>
     </div>
   </div>
@@ -333,7 +332,7 @@ export default defineComponent({
       }
     };
 
-    const syncAllServices = (profileName) => {
+    const syncAllServices = (profileName) => {  
       const profile = profiles.value.find((p) => p.name === profileName);
       if (!profile) return;
 
@@ -341,29 +340,37 @@ export default defineComponent({
       showSyncAllModal.value = true;
     };
 
-const confirmSyncAll = async (selectedNames) => {
-  if (!selectedProfile.value) return;
+    const confirmSyncAll = async (selectedNames) => {
+    const SYNC_DELAY_MS = 8000;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  showSyncAllModal.value = false;
+      if (!selectedProfile.value) return;
 
-  const profile = selectedProfile.value;
+      showSyncAllModal.value = false;
 
-  const targets = profile.services
-    .filter((s) => (s.status ?? "Out of Sync") !== "In Sync")
-    .filter((s) => selectedNames.includes(s.name));
+      const profile = selectedProfile.value;
 
-  if (targets.length === 0) {
-    toast.info("No services selected.");
-    selectedProfile.value = null;
-    return;
-  }
+      const targets = profile.services
+        .filter((s) => (s.status ?? "Out of Sync") !== "In Sync")
+        .filter((s) => selectedNames.includes(s.name));
 
-  await Promise.all(targets.map((service) => syncService(profile, service)));
+      if (targets.length === 0) {
+        toast.info("No services selected.");
+        selectedProfile.value = null;
+        return;
+      }
 
-  toast.success(`Synced ${targets.length} service(s) in ${profile.name}`);
-  selectedProfile.value = null;
-};
+      for (const service of targets) {
+        await syncService(profile, service);
 
+        if (service !== targets[targets.length - 1]) {
+          await sleep(SYNC_DELAY_MS);
+        }
+      }
+
+      toast.success(`Synced ${targets.length} service(s) in ${profile.name}`);
+      selectedProfile.value = null;
+    };
 
     const cancelSyncAll = () => {
       showSyncAllModal.value = false;
