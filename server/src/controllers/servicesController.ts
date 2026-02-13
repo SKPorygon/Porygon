@@ -6,7 +6,6 @@ export const fetchNamespaceDeployments = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
-  console.log("ani homo gadol")
   const { namespace, userToken, clusterUrl } = req.body;
 
   if (!namespace || !userToken || !clusterUrl) {
@@ -38,7 +37,6 @@ export const fetchNamespaceDeployments = async (
     const deploymentNames = (data.items || [])
       .map((d: any) => d.metadata?.name)
       .filter(Boolean);
-console.log("dada: " + deploymentNames);
     res.json({ deploymentNames });
   } catch (error) {
     console.error("Error fetching deployments:", error);
