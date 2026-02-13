@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: porygon-deployment-editor-binding
+  namespace: tomerkenis-dev
+subjects:
+- kind: ServiceAccount
+  name: porygon-sa
+  namespace: tomerkenis-dev
+roleRef:
+  kind: Role
+  name: porygon-deployment-editor
+  apiGroup: rbac.authorization.k8s.io
