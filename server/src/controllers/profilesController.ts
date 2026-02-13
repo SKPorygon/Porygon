@@ -108,15 +108,18 @@ export const createProfile = async (
       clusterUrl
     );
 
-    const hasPermission = await checkUserPermissions(
-      namespace,
-      saToken,
-      clusterUrl,
-      "services",
-      "get"
-    );
+    console.log("before has permissions")
+    // const hasPermission = await checkUserPermissions(
+    //   namespace,
+    //   saToken,
+    //   clusterUrl,
+    //   "services",
+    //   "get"
+    // );
 
-    if (hasPermission) {
+    // console.log("do i have permissions? " + hasPermission)
+
+    // if (hasPermission) {
       const initializedServices = services.map((service: any) => ({
         ...service,
         underTest: service.underTest ?? false,
@@ -143,11 +146,11 @@ export const createProfile = async (
       // monitorOpenShiftChanges(namespace, saToken, clusterUrl, websocketManager);
 
       res.status(201).json({ message: "Profile created successfully", profile });
-    } else {
-      res.status(403).json({
-        message: `User with token: ${userToken} does not have permissions on cluster: ${clusterUrl}`,
-      });
-    }
+    // } else {
+    //   res.status(403).json({
+    //     message: `User with token: ${userToken} does not have permissions on cluster: ${clusterUrl}`,
+    //   });
+    // }
   } catch (error) {
     console.error("Error creating profile:", error);
     res.status(500).json({ error: "Failed to create profile" });
