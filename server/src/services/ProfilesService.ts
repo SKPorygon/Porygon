@@ -1,8 +1,8 @@
 import { IProfile } from "../models/Profile";
-import { getServicesActualVersions } from "./openshiftService";
+import { OpenShiftService } from "./openshiftService";
 
 export const createFullyUpdatedProfile = async (profile: IProfile) => {
-  const actualData = await getServicesActualVersions(
+  const actualData = await OpenShiftService.getServicesActualVersions(
     profile.namespace,
     profile.saToken,
     profile.clusterUrl

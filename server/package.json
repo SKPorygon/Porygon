@@ -4,7 +4,10 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "dev": "nodemon --watch './**/*.ts' --exec ts-node src/server.ts",
+    "dev": "nodemon --watch './src/**/*.ts' --exec ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "type-check": "tsc --noEmit",
     "test": "jest"
   },
   "author": "",

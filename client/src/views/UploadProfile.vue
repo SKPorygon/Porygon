@@ -134,7 +134,7 @@ export default defineComponent({
     const fetchServices = async () => {
       fetching.value = true;
       try {
-        const response = await fetch(`${getConfig().apiUrl}/services`, {
+        const response = await fetch(`http://${getConfig().urlHost}/api/services`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${userStore.token}`,
@@ -190,7 +190,7 @@ export default defineComponent({
       }
       loading.value = true;
       try {
-        const response = await fetch(`${getConfig().apiUrl}/profiles`, {
+        const response = await fetch(`http://${getConfig().urlHost}/api/profiles`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${userStore.token}`,
