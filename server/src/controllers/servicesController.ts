@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { syncService } from "../services/openshiftService";
+import { OpenShiftService } from "../services/openshiftService";
 import WebSocketManager from "src/websockets/websocketServer";
 
 export const fetchNamespaceDeployments = async (
@@ -70,7 +70,7 @@ export const handleSyncService = async (
   }
 
   try {
-    await syncService(
+    await OpenShiftService.syncService(
       namespace,
       serviceName,
       desiredVersion,

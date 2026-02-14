@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Profile } from "../models/Profile";
-import { checkUserPermissions, setupNamespaceAccessWithUserAuth } from "../services/openshiftService";
+// import { checkUserPermissions, setupNamespaceAccessWithUserAuth } from "../services/openshiftService";
+import { OpenShiftService } from "../services/openshiftService";
 import { createFullyUpdatedProfile } from "../services/ProfilesService";
 import WebSocketManager from "../websockets/websocketServer";
 import { monitorOpenShiftChanges } from "../utils/openshiftPoller";
@@ -101,7 +102,7 @@ export const createProfile = async (
     }
 
     // Setup namespace access with the user token
-    const saToken = await setupNamespaceAccessWithUserAuth(
+    const saToken = await OpenShiftService.setupNamespaceAccessWithUserAuth(
       namespace,
       "porygon-sa",
       userToken,
@@ -109,17 +110,7 @@ export const createProfile = async (
     );
 
     console.log("before has permissions")
-    // const hasPermission = await checkUserPermissions(
-    //   namespace,
-    //   saToken,
-    //   clusterUrl,
-    //   "services",
-    //   "get"
-    // );
 
-    // console.log("do i have permissions? " + hasPermission)
-
-    // if (hasPermission) {
       const initializedServices = services.map((service: any) => ({
         ...service,
         underTest: service.underTest ?? false,
@@ -146,11 +137,6 @@ export const createProfile = async (
       // monitorOpenShiftChanges(namespace, saToken, clusterUrl, websocketManager);
 
       res.status(201).json({ message: "Profile created successfully", profile });
-    // } else {
-    //   res.status(403).json({
-    //     message: `User with token: ${userToken} does not have permissions on cluster: ${clusterUrl}`,
-    //   });
-    // }
   } catch (error) {
     console.error("Error creating profile:", error);
     res.status(500).json({ error: "Failed to create profile" });
