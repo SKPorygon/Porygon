@@ -101,7 +101,7 @@ export default {
     const fetchProfileWithInsights = async () => {
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/profiles/${props.profileId}`
+          `http://${getConfig().urlHost}/api/profiles/${props.profileId}`
         );
         if (!response.ok) {
           console.error("Failed to fetch profile insights.");

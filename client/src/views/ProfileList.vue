@@ -201,12 +201,25 @@
 </template>
 
 <script>
-import { defineComponent, ref, computed, onMounted } from "vue";
+import {
+  defineComponent,
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
+import {
+  connectWebsocket,
+  disconnectWebsocket,
+} from "../websockets/websocketClient";
 import { useToast } from "vue-toastification";
 import ProfileCard from "../components/profileList/ProfileCard.vue";
 import { useUserStore } from "../store/userStore";
 import { getConfig } from "../config";
 import SyncAllConfirmModal from "../components/profileList/SyncAllConfirmModal.vue";
+
+// ✅ Socket.IO client
+import { io } from "socket.io-client";
 
 export default defineComponent({
   components: { ProfileCard, SyncAllConfirmModal },
@@ -222,6 +235,9 @@ export default defineComponent({
     const showSyncAllModal = ref(false);
     const selectedProfile = ref(null);
 
+    // ✅ keep socket ref so we can cleanup
+    const socket = ref(null);
+
     const servicesToSync = computed(() => {
       if (!selectedProfile.value) return [];
       return (selectedProfile.value.services || []).filter(
@@ -229,11 +245,10 @@ export default defineComponent({
       );
     });
 
-    // Enhanced data fetching with error handling
     const fetchProfiles = async () => {
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/profiles/get/enriched`,
+          `http://${getConfig().urlHost}/api/profiles/get/enriched`,
           {
             headers: {
               Authorization: `Bearer ${userStore.token}`,
@@ -248,7 +263,7 @@ export default defineComponent({
           const data = await response.json();
           profiles.value = data.map((profile) => ({
             ...profile,
-            lastSynced: new Date().toLocaleString(), // Add timestamp
+            lastSynced: new Date().toLocaleString(),
           }));
         } else {
           toast.error(
@@ -263,14 +278,62 @@ export default defineComponent({
       }
     };
 
+    const connectWs = () => {
+      connectWebsocket(("ws://" + getConfig().urlHost), {
+        onBatchSyncStarted: (data) => {
+          toast.info(
+            `Batch started (${data?.total ?? "?"}) in ${data?.namespace ?? ""}`,
+          );
+        },
+
+        onSyncStarted: (data) => {
+          // אם זה מציף, תחליף ל console.log
+          toast.info(`Sync started: ${data?.serviceName ?? ""}`);
+        },
+
+        onSyncStep: (data) => {
+          // לא טוסט כדי לא להציף
+          console.log("SYNC_STEP", data);
+        },
+
+        onSyncComplete: async (data) => {
+          // זה כבר עובד אצלך, אבל עכשיו זה מסודר
+          if (data?.status === "success") {
+            toast.success(`✅ ${data?.serviceName ?? ""} synced`);
+          } else {
+            toast.error(
+              `❌ ${data?.serviceName ?? ""} failed: ${data?.error ?? "Unknown"}`,
+            );
+          }
+
+          // ✅ עדכון טבלה - אפשר פה, אבל זה יכול לגרום להרבה refreshים בבאץ'
+          // אם זה כבד לך, תמחק את זה ותעשה רק ב-BATCH_SYNC_COMPLETE.
+          await fetchProfiles();
+        },
+
+        onServiceSynced: async (data) => {
+          // ✅ זה event “נקי” לרענון
+          await fetchProfiles();
+        },
+
+        onBatchSyncComplete: async (data) => {
+          toast.success(
+            `Batch complete: ${data?.successCount ?? 0} ok, ${data?.errorCount ?? 0} failed`,
+          );
+          // ✅ רענון טבלה בסוף הבאץ' (מומלץ)
+          await fetchProfiles();
+        },
+      });
+    };
+
     const toggleOutOfSyncFilter = () => {
       showOutOfSyncOnly.value = !showOutOfSyncOnly.value;
-      showTestingOnly.value = false; // Reset testing view
+      showTestingOnly.value = false;
     };
 
     const toggleTestingView = () => {
       showTestingOnly.value = !showTestingOnly.value;
-      showOutOfSyncOnly.value = false; // Reset out of sync view
+      showOutOfSyncOnly.value = false;
     };
 
     const filteredProfiles = computed(() => {
@@ -299,9 +362,82 @@ export default defineComponent({
       return result;
     });
 
+    // ✅ WebSocket (Socket.IO) connect + listeners
+    const connectSocket = () => {
+      // 🔥 חשוב: apiUrl אצלך לפעמים כולל /api ואז socket לא מתחבר.
+      // לכן אנחנו מסירים /api אם קיים.
+      const apiUrl = getConfig().apiUrl;
+      const wsUrl = apiUrl.replace(/\/api\/?$/, ""); // remove trailing /api
+
+      const s = io(wsUrl, {
+        transports: ["websocket"],
+        // אם השרת שלך צריך auth כאן, אפשר:
+        // auth: { token: userStore.token },
+      });
+
+      socket.value = s;
+
+      s.on("connect", () => {
+        console.log("✅ socket connected:", s.id, "url:", wsUrl);
+      });
+
+      s.on("disconnect", () => {
+        console.log("❌ socket disconnected");
+      });
+
+      // ---- Your events ----
+      s.on("BATCH_SYNC_STARTED", (p) => {
+        toast.info(
+          `Batch sync started (${p?.total ?? "?"}) in ${p?.namespace ?? ""}`,
+        );
+      });
+
+      s.on("SYNC_STARTED", (p) => {
+        // לא להציף בטוסטים? אם תרצה תחליף ל console.log
+        toast.info(`Sync started: ${p?.serviceName ?? ""}`);
+      });
+
+      s.on("SYNC_STEP", (p) => {
+        // עדיף לא טוסט כל step כי זה מציף.
+        console.log("SYNC_STEP:", p);
+      });
+
+      s.on("SYNC_COMPLETE", async (p) => {
+        const name = p?.serviceName ?? "";
+        if (p?.status === "success") {
+          toast.success(`✅ ${name} synced`);
+        } else {
+          toast.error(`❌ ${name} failed: ${p?.error ?? "Unknown error"}`);
+        }
+        // אפשר לרענן אחרי כל שירות, אבל זה יכול להיות כבד.
+        // אם זה מציק, תעביר את refresh רק ל-BATCH_SYNC_COMPLETE.
+        await fetchProfiles();
+      });
+
+      s.on("SERVICE_SYNCED", async (p) => {
+        // event נוסף שלך - לא חובה, אבל טוב לרענון
+        await fetchProfiles();
+      });
+
+      s.on("BATCH_SYNC_COMPLETE", async (p) => {
+        toast.success(
+          `Batch complete: ${p?.successCount ?? 0} ok, ${p?.errorCount ?? 0} failed`,
+        );
+        await fetchProfiles();
+      });
+    };
+
+    const disconnectSocket = () => {
+      if (socket.value) {
+        socket.value.removeAllListeners();
+        socket.value.disconnect();
+        socket.value = null;
+      }
+    };
+
     const syncService = async (profile, service) => {
       try {
-        const response = await fetch(`${getConfig().apiUrl}/services/sync`, {
+        const response = await fetch(`http://${getConfig().urlHost}/api/services/sync`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -309,18 +445,18 @@ export default defineComponent({
           body: JSON.stringify({
             namespace: profile.namespace,
             serviceName: service.name,
-            actualVersion: service.actualVersion,
             desiredVersion: service.desiredVersion,
             desiredPodCount: service.desiredPodCount,
-            actualPodCount: service.actualPodCount,
             saToken: profile.saToken,
             clusterUrl: profile.clusterUrl,
           }),
         });
 
         if (response.ok) {
-          toast.success(`Successfully synced ${service.name}`);
-          await fetchProfiles(); // Refresh data after sync
+          toast.success(
+            `Started sync for ${service.name}. Watch live updates…`,
+          );
+          // אל תעשה fetchProfiles פה — ה-WS כבר יעדכן
         } else {
           const errorData = await response.json();
           toast.error(
@@ -332,7 +468,7 @@ export default defineComponent({
       }
     };
 
-    const syncAllServices = (profileName) => {  
+    const syncAllServices = (profileName) => {
       const profile = profiles.value.find((p) => p.name === profileName);
       if (!profile) return;
 
@@ -341,16 +477,13 @@ export default defineComponent({
     };
 
     const confirmSyncAll = async (selectedNames) => {
-    const SYNC_DELAY_MS = 8000;
-    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
       if (!selectedProfile.value) return;
 
       showSyncAllModal.value = false;
 
       const profile = selectedProfile.value;
 
-      const targets = profile.services
+      const targets = (profile.services || [])
         .filter((s) => (s.status ?? "Out of Sync") !== "In Sync")
         .filter((s) => selectedNames.includes(s.name));
 
@@ -360,16 +493,43 @@ export default defineComponent({
         return;
       }
 
-      for (const service of targets) {
-        await syncService(profile, service);
+      try {
+        const response = await fetch(
+          `http://${getConfig().urlHost}/api/services/multiple-sync`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              namespace: profile.namespace,
+              servicesData: targets.map((t) => ({
+                name: t.name,
+                desiredVersion: t.desiredVersion,
+                desiredPodCount: t.desiredPodCount,
+              })),
+              saToken: profile.saToken,
+              clusterUrl: profile.clusterUrl,
+            }),
+          },
+        );
 
-        if (service !== targets[targets.length - 1]) {
-          await sleep(SYNC_DELAY_MS);
+        if (response.ok) {
+          toast.success(
+            `Batch started: syncing ${targets.length} service(s) in ${profile.name}. Watch live updates…`,
+          );
+          // אל תעשה fetchProfiles פה — ה-WS יסגור את זה
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          toast.error(
+            `Failed to start sync: ${errorData.error || "Unknown error"}`,
+          );
         }
+      } catch (error) {
+        toast.error("Network error. Unable to start sync.");
+      } finally {
+        selectedProfile.value = null;
       }
-
-      toast.success(`Synced ${targets.length} service(s) in ${profile.name}`);
-      selectedProfile.value = null;
     };
 
     const cancelSyncAll = () => {
@@ -377,7 +537,14 @@ export default defineComponent({
       selectedProfile.value = null;
     };
 
-    onMounted(fetchProfiles);
+    onMounted(async () => {
+      await fetchProfiles();
+      connectWs(); // ✅ connect WS once when page mounts
+    });
+
+    onBeforeUnmount(() => {
+       disconnectWebsocket(); // ✅ cleanup
+    });
 
     return {
       profiles,

@@ -1,50 +1,103 @@
-import { useToast } from "vue-toastification";
-const toast = useToast();
+// src/services/websocketClient.ts
 
-class WebSocketClient {
-  private socket: WebSocket | null = null;
+export type WsEnvelope<T = any> = {
+  eventType: string;
+  data: T;
+};
 
-  connect(url: string) {
-    this.socket = new WebSocket(url);
+export type WsHandlers = {
+  onConnected?: () => void;
+  onDisconnected?: () => void;
 
-    this.socket.onopen = () => {
-      console.log('Connected to WebSocket server');
-    };
+  onBatchSyncStarted?: (data: any) => void;
+  onBatchSyncComplete?: (data: any) => void;
 
-    this.socket.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      console.log('Message from server:', message);
+  onSyncStarted?: (data: any) => void;
+  onSyncStep?: (data: any) => void;
+  onSyncComplete?: (data: any) => void;
 
-      switch (message.eventType) {
-        case 'SYNC_COMPLETE':
-          console.log("sync complete!")
-          this.handleSyncComplete(message.data);
-          break;
-        default:
-          console.log('Unknown event type:', message.eventType);
-      }
-    };
+  onServiceSynced?: (data: any) => void;
 
-    this.socket.onclose = () => {
-      console.log('Disconnected from WebSocket server');
-    };
+  // fallback
+  onUnknownEvent?: (eventType: string, data: any) => void;
+};
 
-    this.socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-  }
+let ws: WebSocket | null = null;
 
-  private handleSyncComplete(data: { serviceName: string; namespace: string; status: string; error?: string }) {
-    console.log("in ze complit: " + JSON.stringify(data))
-    if (data.status === 'success') {
-      console.log("in ze suc")
-      toast.success(`Service ${data.serviceName} synced successfully in namespace ${data.namespace}`);
-    } else {
-      toast.error(`Failed to sync service ${data.serviceName} in namespace ${data.namespace}: ${data.error}`);
+export const connectWebsocket = (wsUrl: string, handlers: WsHandlers = {}) => {
+  ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    console.log("✅ WS connected:", wsUrl);
+    handlers.onConnected?.();
+  };
+
+  ws.onclose = () => {
+    console.log("❌ WS disconnected");
+    handlers.onDisconnected?.();
+  };
+
+  ws.onerror = (e) => {
+    console.log("❌ WS error:", e);
+  };
+
+  ws.onmessage = (evt) => {
+    let msg: WsEnvelope;
+    try {
+      msg = JSON.parse(evt.data);
+    } catch (e) {
+      console.log("WS non-json message:", evt.data);
+      return;
     }
 
-    // Optionally, trigger a UI refresh or state update here
-  }
-}
+    const { eventType, data } = msg;
 
-export default new WebSocketClient();
+    // Debug:
+    // console.log("Message from server:", msg);
+
+    switch (eventType) {
+      case "BATCH_SYNC_STARTED":
+        handlers.onBatchSyncStarted?.(data);
+        return;
+
+      case "BATCH_SYNC_COMPLETE":
+        handlers.onBatchSyncComplete?.(data);
+        return;
+
+      case "SYNC_STARTED":
+        handlers.onSyncStarted?.(data);
+        return;
+
+      case "SYNC_STEP":
+        handlers.onSyncStep?.(data);
+        return;
+
+      case "SYNC_COMPLETE":
+        handlers.onSyncComplete?.(data);
+        return;
+
+      case "SERVICE_SYNCED":
+        handlers.onServiceSynced?.(data);
+        return;
+
+      default:
+        console.warn("Unknown event type:", eventType, data);
+        handlers.onUnknownEvent?.(eventType, data);
+        return;
+    }
+  };
+
+  return ws;
+};
+
+export const disconnectWebsocket = () => {
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+};
+
+export default {
+  connectWebsocket,
+  disconnectWebsocket,
+};

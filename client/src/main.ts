@@ -7,8 +7,8 @@ import "./index.css";
 import "./style.css";
 import Toast from "vue-toastification";
 import "vue-toastification/dist/index.css";
-import socketClient from "./websockets/websocketClient";
-import { loadConfig } from "./config";
+import { connectWebsocket } from "./websockets/websocketClient";
+import { loadConfig, getConfig } from "./config";
 
 const pinia = createPinia();
 const app = createApp(App);
@@ -32,12 +32,10 @@ app.use(Toast, {
 
 app.use(pinia);
 
-socketClient.connect("ws://localhost:3000");
-
 router.afterEach((to) => {
   // שינוי title
   if (to.meta?.title) {
-    document.title = `${to.meta.title} ‣ Porygon`;
+    document.title = `Porygon ‣ ${to.meta.title}`;
   }
 
   // שינוי favicon
@@ -63,5 +61,3 @@ router.afterEach((to) => {
 
 app.use(router);
 app.mount("#app");
-
-export default socketClient;
