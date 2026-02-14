@@ -1,103 +1,92 @@
 // src/services/websocketClient.ts
+export type WsEnvelope<T = any> = { eventType: string; data: T };
 
-export type WsEnvelope<T = any> = {
-  eventType: string;
-  data: T;
-};
+type Handler = (data: any) => void;
 
-export type WsHandlers = {
-  onConnected?: () => void;
-  onDisconnected?: () => void;
+class WebsocketClient {
+  private ws: WebSocket | null = null;
+  private isConnecting = false;
+  private handlers: Record<string, Set<Handler>> = {};
+  private apiUrl: string | null = null;
 
-  onBatchSyncStarted?: (data: any) => void;
-  onBatchSyncComplete?: (data: any) => void;
-
-  onSyncStarted?: (data: any) => void;
-  onSyncStep?: (data: any) => void;
-  onSyncComplete?: (data: any) => void;
-
-  onServiceSynced?: (data: any) => void;
-
-  // fallback
-  onUnknownEvent?: (eventType: string, data: any) => void;
-};
-
-let ws: WebSocket | null = null;
-
-export const connectWebsocket = (wsUrl: string, handlers: WsHandlers = {}) => {
-  ws = new WebSocket(wsUrl);
-
-  ws.onopen = () => {
-    console.log("✅ WS connected:", wsUrl);
-    handlers.onConnected?.();
-  };
-
-  ws.onclose = () => {
-    console.log("❌ WS disconnected");
-    handlers.onDisconnected?.();
-  };
-
-  ws.onerror = (e) => {
-    console.log("❌ WS error:", e);
-  };
-
-  ws.onmessage = (evt) => {
-    let msg: WsEnvelope;
-    try {
-      msg = JSON.parse(evt.data);
-    } catch (e) {
-      console.log("WS non-json message:", evt.data);
+  connect(apiUrl: string) {
+    // כבר מחובר/מתחבר
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
+    if (this.isConnecting) return;
 
-    const { eventType, data } = msg;
+    this.apiUrl = apiUrl;
+    const wsUrl = this.toWsUrl(apiUrl);
 
-    // Debug:
-    // console.log("Message from server:", msg);
+    this.isConnecting = true;
+    this.ws = new WebSocket(wsUrl);
 
-    switch (eventType) {
-      case "BATCH_SYNC_STARTED":
-        handlers.onBatchSyncStarted?.(data);
+    this.ws.onopen = () => {
+      this.isConnecting = false;
+      console.log("✅ WS connected:", wsUrl);
+      this.emitLocal("WS_CONNECTED", {});
+    };
+
+    this.ws.onclose = () => {
+      this.isConnecting = false;
+      console.log("❌ WS disconnected");
+      this.emitLocal("WS_DISCONNECTED", {});
+      this.ws = null;
+
+      // אופציונלי: auto-reconnect
+      // setTimeout(() => this.apiUrl && this.connect(this.apiUrl), 1500);
+    };
+
+    this.ws.onerror = (e) => {
+      console.log("❌ WS error:", e);
+    };
+
+    this.ws.onmessage = (evt) => {
+      let msg: WsEnvelope;
+      try {
+        msg = JSON.parse(evt.data);
+      } catch {
         return;
-
-      case "BATCH_SYNC_COMPLETE":
-        handlers.onBatchSyncComplete?.(data);
-        return;
-
-      case "SYNC_STARTED":
-        handlers.onSyncStarted?.(data);
-        return;
-
-      case "SYNC_STEP":
-        handlers.onSyncStep?.(data);
-        return;
-
-      case "SYNC_COMPLETE":
-        handlers.onSyncComplete?.(data);
-        return;
-
-      case "SERVICE_SYNCED":
-        handlers.onServiceSynced?.(data);
-        return;
-
-      default:
-        console.warn("Unknown event type:", eventType, data);
-        handlers.onUnknownEvent?.(eventType, data);
-        return;
-    }
-  };
-
-  return ws;
-};
-
-export const disconnectWebsocket = () => {
-  if (ws) {
-    ws.close();
-    ws = null;
+      }
+      const { eventType, data } = msg;
+      this.emitLocal(eventType, data);
+    };
   }
-};
 
-export default {
-  connectWebsocket,
-  disconnectWebsocket,
-};
+  disconnect() {
+    if (this.ws) this.ws.close();
+    this.ws = null;
+    this.isConnecting = false;
+  }
+
+  on(eventType: string, handler: Handler) {
+    if (!this.handlers[eventType]) this.handlers[eventType] = new Set();
+    this.handlers[eventType].add(handler);
+
+    // החזרה של unsubscribe
+    return () => this.off(eventType, handler);
+  }
+
+  off(eventType: string, handler: Handler) {
+    this.handlers[eventType]?.delete(handler);
+  }
+
+  private emitLocal(eventType: string, data: any) {
+    const set = this.handlers[eventType];
+    if (!set || set.size === 0) return;
+    for (const h of set) {
+      try { h(data); } catch (e) { console.error("WS handler error:", e); }
+    }
+  }
+
+  private toWsUrl(apiUrl: string) {
+    const url = new URL(apiUrl);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = url.pathname.replace(/\/api\/?$/, "");
+    return url.toString();
+  }
+}
+
+// ✅ singleton
+export const websocketClient = new WebsocketClient();

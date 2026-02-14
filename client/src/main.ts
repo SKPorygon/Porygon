@@ -7,7 +7,7 @@ import "./index.css";
 import "./style.css";
 import Toast from "vue-toastification";
 import "vue-toastification/dist/index.css";
-import { connectWebsocket } from "./websockets/websocketClient";
+import { websocketClient } from "./websockets/websocketClient";
 import { loadConfig, getConfig } from "./config";
 
 const pinia = createPinia();
@@ -31,6 +31,8 @@ app.use(Toast, {
 });
 
 app.use(pinia);
+
+websocketClient.connect(`ws://${getConfig().urlHost}`);
 
 router.afterEach((to) => {
   // שינוי title
