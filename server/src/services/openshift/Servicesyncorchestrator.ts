@@ -68,7 +68,7 @@ export class ServiceSyncOrchestrator {
 
       // Sync replicas if needed
       const currentPodCount = deployment.spec.replicas;
-      if (currentPodCount !== desiredPodCount) {
+      if (currentPodCount && currentPodCount !== desiredPodCount) {
         await this.syncReplicas(
           namespace,
           serviceName,

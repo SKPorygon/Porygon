@@ -111,7 +111,7 @@ export const handleMultipleSyncService = async (
 
   // ✅ response once
   res.status(202).json({
-    message: `Smart batch sync started`,
+    message: "Smart batch sync started",
     total: servicesData.length,
   });
 
@@ -124,7 +124,7 @@ export const handleMultipleSyncService = async (
   let successCount = 0;
   let errorCount = 0;
 
-  const BETWEEN_SERVICES_DELAY_MS = 2000;
+  const BETWEEN_SERVICES_DELAY_MS = 500;
 
   for (const service of servicesData) {
     const serviceName = service?.name;
@@ -156,6 +156,7 @@ export const handleMultipleSyncService = async (
         websocketManager,
       );
 
+      // 2) Wait rollout
       await deploymentService.waitForDeploymentRollout(
         namespace,
         serviceName,
@@ -163,7 +164,20 @@ export const handleMultipleSyncService = async (
         websocketManager,
         {
           pollIntervalMs: 2000,
-          timeoutMs: 1 * 60 * 1000,
+          timeoutMs: 60_000,
+        },
+      );
+
+      // 3) ✅ Guard: make sure no terminating pods before moving on
+      await deploymentService.waitForNoTerminatingPods(
+        namespace,
+        serviceName,
+        websocketManager,
+        {
+          pollIntervalMs: 2000,
+          timeoutMs: 60_000,
+          scope: "deployment", // שנה ל-"namespace" אם אתה רוצה guard על כל הניימספייס
+          // labelSelectorOverride: `app=${serviceName}`, // אם יש לכם selector חד משמעי
         },
       );
 

@@ -8,26 +8,24 @@ import WebSocketManager from "../../websockets/websocketServer";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const isConditionTrue = (deployment: any, type: string) => {
-  const conditions = deployment?.status?.conditions ?? [];
-  const c = conditions.find((x: any) => x?.type === type);
-  return c?.status === "True";
-};
-
-const describeProgress = (deployment: any) => {
-  const st = deployment?.status ?? {};
-  return {
-    replicas: st.replicas ?? 0,
-    updated: st.updatedReplicas ?? 0,
-    ready: st.readyReplicas ?? 0,
-    available: st.availableReplicas ?? 0,
-    unavailable: st.unavailableReplicas ?? 0,
-  };
-};
-
 type RolloutWaitOptions = {
-  pollIntervalMs?: number; // כל כמה זמן לבדוק סטטוס
-  timeoutMs?: number; // כמה זמן מקסימום לחכות לשירות
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+};
+
+type PodWaitOptions = {
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+  /**
+   * default: "deployment"
+   * "namespace" ימתין שאין Terminating pods בכלל בnamespace
+   */
+  scope?: "deployment" | "namespace";
+  /**
+   * אם אתה יודע selector מדויק אצלכם, תוכל להעביר אותו ולדלג על candidateSelectors.
+   * לדוגמה: "app=my-service" או "app.kubernetes.io/name=my-service"
+   */
+  labelSelectorOverride?: string;
 };
 
 export interface DeploymentInfo {
@@ -41,9 +39,18 @@ interface Container {
   image: string;
 }
 
+interface K8sCondition {
+  type?: string;
+  status?: string; // "True" | "False" | "Unknown"
+  reason?: string;
+  message?: string;
+  lastUpdateTime?: string;
+  lastTransitionTime?: string;
+}
+
 interface DeploymentSpec {
   spec: {
-    replicas: number;
+    replicas?: number;
     template: {
       spec: {
         containers: Container[];
@@ -51,17 +58,53 @@ interface DeploymentSpec {
     };
   };
   status?: {
+    replicas?: number;
     readyReplicas?: number;
     availableReplicas?: number;
+    updatedReplicas?: number;
+    unavailableReplicas?: number;
+    observedGeneration?: number;
+    conditions?: K8sCondition[];
   };
   metadata: {
     name: string;
+    generation?: number;
   };
 }
 
 interface DeploymentList {
   items: DeploymentSpec[];
 }
+
+type Pod = {
+  metadata?: {
+    name?: string;
+    deletionTimestamp?: string;
+    labels?: Record<string, string>;
+  };
+  status?: {
+    phase?: string;
+  };
+};
+
+type PodList = { items: Pod[] };
+
+const isConditionTrue = (deployment: DeploymentSpec, type: string) => {
+  const conditions = deployment?.status?.conditions ?? [];
+  const c = conditions.find((x) => x?.type === type);
+  return c?.status === "True";
+};
+
+const describeProgress = (deployment: DeploymentSpec) => {
+  const st = deployment?.status ?? {};
+  return {
+    replicas: st.replicas ?? 0,
+    updated: st.updatedReplicas ?? 0,
+    ready: st.readyReplicas ?? 0,
+    available: st.availableReplicas ?? 0,
+    unavailable: st.unavailableReplicas ?? 0,
+  };
+};
 
 /**
  * Manages Kubernetes Deployments
@@ -71,9 +114,7 @@ export class DeploymentService extends KubernetesClient {
     super(config);
   }
 
-  /**
-   * Get all deployments in a namespace
-   */
+  /** Get all deployments in a namespace */
   async list(namespace: string): Promise<DeploymentSpec[]> {
     const response = await this.request<DeploymentList>(
       `/apis/apps/v1/namespaces/${namespace}/deployments`,
@@ -82,9 +123,7 @@ export class DeploymentService extends KubernetesClient {
     return response.items;
   }
 
-  /**
-   * Get a single deployment by name
-   */
+  /** Get a single deployment by name */
   async get(namespace: string, name: string): Promise<DeploymentSpec> {
     return this.request<DeploymentSpec>(
       `/apis/apps/v1/namespaces/${namespace}/deployments/${name}`,
@@ -92,9 +131,7 @@ export class DeploymentService extends KubernetesClient {
     );
   }
 
-  /**
-   * Get versions and pod counts for all deployments in a namespace
-   */
+  /** Get versions and pod counts for all deployments in a namespace */
   async getVersionsAndPodCounts(
     namespace: string,
   ): Promise<Record<string, DeploymentInfo>> {
@@ -135,9 +172,7 @@ export class DeploymentService extends KubernetesClient {
     return versions;
   }
 
-  /**
-   * Update the image of a specific container in a deployment
-   */
+  /** Update the image of a specific container in a deployment */
   async updateImage(
     namespace: string,
     deploymentName: string,
@@ -165,9 +200,7 @@ export class DeploymentService extends KubernetesClient {
     );
   }
 
-  /**
-   * Scale a deployment to a specific number of replicas
-   */
+  /** Scale a deployment to a specific number of replicas */
   async scale(
     namespace: string,
     deploymentName: string,
@@ -183,21 +216,108 @@ export class DeploymentService extends KubernetesClient {
       },
     });
 
-    console.log(
-      `Scaled deployment "${deploymentName}" to ${replicas} replicas.`,
-    );
+    console.log(`Scaled deployment "${deploymentName}" to ${replicas} replicas.`);
   }
 
-  /**
-   * Find the index of a container by name in the deployment spec
-   */
+  /** Find the index of a container by name in the deployment spec */
   findContainerIndex(containers: Container[], containerName: string): number {
     return containers.findIndex((c) => c.name === containerName);
   }
 
+  /** List pods in namespace, optionally filtered by labelSelector */
+  async listPods(namespace: string, labelSelector?: string): Promise<Pod[]> {
+    const qs = labelSelector
+      ? `?labelSelector=${encodeURIComponent(labelSelector)}`
+      : "";
+    const res = await this.request<PodList>(
+      `/api/v1/namespaces/${namespace}/pods${qs}`,
+      { method: "GET" },
+    );
+    return res.items ?? [];
+  }
+
   /**
-   * Wait until a deployment finishes rollout to desired replicas (or timeout).
+   * Wait until there are no terminating pods (deletionTimestamp exists).
+   * - scope="deployment": tries to filter pods that belong to the deployment via common label selectors,
+   *   otherwise falls back to scanning the whole namespace (safer, but broader).
+   * - scope="namespace": scans the whole namespace only.
    */
+  async waitForNoTerminatingPods(
+    namespace: string,
+    deploymentName: string,
+    websocketManager: WebSocketManager,
+    opts: PodWaitOptions = {},
+  ): Promise<void> {
+    const pollIntervalMs = opts.pollIntervalMs ?? 2000;
+    const timeoutMs = opts.timeoutMs ?? 60_000;
+    const scope = opts.scope ?? "deployment";
+
+    const start = Date.now();
+
+    const candidateSelectors = opts.labelSelectorOverride
+      ? [opts.labelSelectorOverride]
+      : [
+          // נפוצים
+          `app=${deploymentName}`,
+          `app.kubernetes.io/name=${deploymentName}`,
+          // לפעמים משתמשים בזה
+          `name=${deploymentName}`,
+        ];
+
+    websocketManager.broadcast("SYNC_STEP", {
+      namespace,
+      serviceName: deploymentName,
+      step: "WAITING_FOR_NO_TERMINATING_PODS",
+      scope,
+      pollIntervalMs,
+      timeoutMs,
+    });
+
+    while (true) {
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(
+          `Terminating pods guard timeout for "${deploymentName}" after ${Math.round(timeoutMs / 1000)}s`,
+        );
+      }
+
+      let pods: Pod[] = [];
+
+      if (scope === "namespace") {
+        pods = await this.listPods(namespace);
+      } else {
+        // scope === "deployment"
+        // נסה קודם selectors; אם לא מצאת בכלל pods, fall back לכל הניימספייס (שלא תתקע על selector לא נכון)
+        for (const sel of candidateSelectors) {
+          const found = await this.listPods(namespace, sel);
+          if (found.length > 0) {
+            pods = found;
+            break;
+          }
+        }
+        if (pods.length === 0) {
+          pods = await this.listPods(namespace);
+        }
+      }
+
+      const terminating = pods.filter((p) => Boolean(p?.metadata?.deletionTimestamp));
+      const terminatingNames = terminating
+        .map((p) => p?.metadata?.name)
+        .filter(Boolean) as string[];
+
+      websocketManager.broadcast("SYNC_STEP", {
+        namespace,
+        serviceName: deploymentName,
+        step: "TERMINATING_PODS_STATUS",
+        terminatingCount: terminatingNames.length,
+        terminatingPods: terminatingNames.slice(0, 20), // אל תציף
+      });
+
+      if (terminatingNames.length === 0) return;
+
+      await sleep(pollIntervalMs);
+    }
+  }
+
   /**
    * Wait until a deployment finishes rollout to desired replicas (or timeout).
    */
@@ -209,7 +329,7 @@ export class DeploymentService extends KubernetesClient {
     opts: RolloutWaitOptions = {},
   ): Promise<void> {
     const pollIntervalMs = opts.pollIntervalMs ?? 2000;
-    const timeoutMs = opts.timeoutMs ?? 1 * 60 * 1000;
+    const timeoutMs = opts.timeoutMs ?? 60_000;
 
     const start = Date.now();
 
@@ -231,11 +351,10 @@ export class DeploymentService extends KubernetesClient {
 
       const deployment = await this.get(namespace, deploymentName);
 
-      const generation = (deployment as any)?.metadata?.generation ?? 0;
-      const observedGeneration =
-        (deployment as any)?.status?.observedGeneration ?? 0;
+      const generation = deployment?.metadata?.generation ?? 0;
+      const observedGeneration = deployment?.status?.observedGeneration ?? 0;
 
-      const st = (deployment as any)?.status ?? {};
+      const st = deployment?.status ?? {};
       const updated = st.updatedReplicas ?? 0;
       const available = st.availableReplicas ?? 0;
 
