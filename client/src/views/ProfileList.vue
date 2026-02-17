@@ -155,15 +155,21 @@
                   <h3 class="text-lg font-semibold text-gray-700 mb-2">
                     {{ testingProfile.name }}
                   </h3>
-                  <div 
-      v-for="service in testingProfile.services"
-      :key="service.name"
-      class="flex items-center justify-between rounded-lg bg-gray-50 p-2 text-sm shadow-sm"
-      :class="{'border border-blue-100': testingProfile.isActive}"
-    >
-      <span class="font-medium text-gray-700">{{ service.name }}</span>
-      <span class="text-gray-500">v{{ service.desiredVersion }}</span>
-    </div>
+                  <div
+                    v-for="service in testingProfile.services"
+                    :key="service.name"
+                    class="flex items-center justify-between rounded-lg bg-gray-50 p-2 text-sm shadow-sm"
+                    :class="{
+                      'border border-blue-100': testingProfile.isActive,
+                    }"
+                  >
+                    <span class="font-medium text-gray-700">{{
+                      service.name
+                    }}</span>
+                    <span class="text-gray-500"
+                      >v{{ service.desiredVersion }}</span
+                    >
+                  </div>
                 </div>
               </div>
             </template>
@@ -181,20 +187,37 @@
             </template>
           </div>
         </div>
+        <SyncAllConfirmModal
+          :show="showSyncAllModal"
+          :profile-name="selectedProfile?.name || ''"
+          :namespace="selectedProfile?.namespace || ''"
+          :services-to-sync="servicesToSync"
+          @confirm="confirmSyncAll"
+          @cancel="cancelSyncAll"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { defineComponent, ref, computed, onMounted } from "vue";
+import {
+  defineComponent,
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+} from "vue";
+import { websocketClient } from "../websockets/websocketClient";
 import { useToast } from "vue-toastification";
 import ProfileCard from "../components/profileList/ProfileCard.vue";
 import { useUserStore } from "../store/userStore";
 import { getConfig } from "../config";
+import SyncAllConfirmModal from "../components/profileList/SyncAllConfirmModal.vue";
 
 export default defineComponent({
-  components: { ProfileCard },
+  components: { ProfileCard, SyncAllConfirmModal },
+
   setup() {
     const toast = useToast();
     const profiles = ref([]);
@@ -203,29 +226,41 @@ export default defineComponent({
     const showOutOfSyncOnly = ref(false);
     const showTestingOnly = ref(false);
     const userStore = useUserStore();
+    const showSyncAllModal = ref(false);
+    const selectedProfile = ref(null);
 
-    // Enhanced data fetching with error handling
+    // ✅ keep unsubscribers so we can cleanup
+    let unsubs = [];
+
+    const servicesToSync = computed(() => {
+      if (!selectedProfile.value) return [];
+      return (selectedProfile.value.services || []).filter(
+        (s) => s.status !== "In Sync",
+      );
+    });
+
     const fetchProfiles = async () => {
       try {
-        const response = await fetch(`${getConfig().apiUrl}/profiles/get/enriched`, {
-          headers: {
-            Authorization: `Bearer ${userStore.token}`,
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-            Expires: "0",
+        const response = await fetch(
+          `http://${getConfig().urlHost}/api/profiles/get/enriched`,
+          {
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+              "Cache-Control": "no-cache",
+              Pragma: "no-cache",
+              Expires: "0",
+            },
           },
-        });
+        );
 
         if (response.ok) {
           const data = await response.json();
           profiles.value = data.map((profile) => ({
             ...profile,
-            lastSynced: new Date().toLocaleString(), // Add timestamp
+            lastSynced: new Date().toLocaleString(),
           }));
         } else {
-          toast.error(
-            "Failed to fetch profiles. Please check your connection."
-          );
+          toast.error("Failed to fetch profiles. Please check your connection.");
         }
       } catch (error) {
         console.error("Error fetching profiles:", error);
@@ -237,12 +272,12 @@ export default defineComponent({
 
     const toggleOutOfSyncFilter = () => {
       showOutOfSyncOnly.value = !showOutOfSyncOnly.value;
-      showTestingOnly.value = false; // Reset testing view
+      showTestingOnly.value = false;
     };
 
     const toggleTestingView = () => {
       showTestingOnly.value = !showTestingOnly.value;
-      showOutOfSyncOnly.value = false; // Reset out of sync view
+      showOutOfSyncOnly.value = false;
     };
 
     const filteredProfiles = computed(() => {
@@ -253,7 +288,7 @@ export default defineComponent({
         result = result.filter(
           (profile) =>
             profile.name.toLowerCase().includes(query) ||
-            profile.namespace.toLowerCase().includes(query)
+            profile.namespace.toLowerCase().includes(query),
         );
       }
 
@@ -262,7 +297,7 @@ export default defineComponent({
           .map((profile) => ({
             ...profile,
             services: profile.services.filter(
-              (service) => service.status === "Out of Sync"
+              (service) => service.status === "Out of Sync",
             ),
           }))
           .filter((profile) => profile.services.length > 0);
@@ -274,7 +309,7 @@ export default defineComponent({
     const syncService = async (profile, service) => {
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/services/sync`,
+          `http://${getConfig().urlHost}/api/services/sync`,
           {
             method: "POST",
             headers: {
@@ -283,23 +318,21 @@ export default defineComponent({
             body: JSON.stringify({
               namespace: profile.namespace,
               serviceName: service.name,
-              actualVersion: service.actualVersion,
               desiredVersion: service.desiredVersion,
               desiredPodCount: service.desiredPodCount,
-              actualPodCount: service.actualPodCount,
               saToken: profile.saToken,
               clusterUrl: profile.clusterUrl,
             }),
-          }
+          },
         );
 
         if (response.ok) {
-          toast.success(`Successfully synced ${service.name}`);
-          await fetchProfiles(); // Refresh data after sync
+          toast.info(`Started sync for ${service.name}. Watch live updates…`);
+          // ❗ לא עושים fetchProfiles כאן — ה-WS יעדכן
         } else {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({}));
           toast.error(
-            `Failed to sync service: ${errorData.error || "Unknown error"}`
+            `Failed to sync service: ${errorData.error || "Unknown error"}`,
           );
         }
       } catch (error) {
@@ -307,18 +340,127 @@ export default defineComponent({
       }
     };
 
-    const syncAllServices = async (profileName) => {
+    const syncAllServices = (profileName) => {
       const profile = profiles.value.find((p) => p.name === profileName);
-      if (profile) {
-        const syncPromises = profile.services
-          .filter((service) => service.status !== "In Sync")
-          .map((service) => syncService(profile, service));
+      if (!profile) return;
 
-        await Promise.all(syncPromises);
-        toast.success(`Synced all services in ${profileName}`);
+      selectedProfile.value = profile;
+      showSyncAllModal.value = true;
+    };
+
+    const confirmSyncAll = async (selectedNames) => {
+      if (!selectedProfile.value) return;
+
+      showSyncAllModal.value = false;
+
+      const profile = selectedProfile.value;
+
+      const targets = (profile.services || [])
+        .filter((s) => (s.status ?? "Out of Sync") !== "In Sync")
+        .filter((s) => selectedNames.includes(s.name));
+
+      if (targets.length === 0) {
+        toast.info("No services selected.");
+        selectedProfile.value = null;
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `http://${getConfig().urlHost}/api/services/multiple-sync`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              namespace: profile.namespace,
+              servicesData: targets.map((t) => ({
+                name: t.name,
+                desiredVersion: t.desiredVersion,
+                desiredPodCount: t.desiredPodCount,
+              })),
+              saToken: profile.saToken,
+              clusterUrl: profile.clusterUrl,
+            }),
+          },
+        );
+
+        if (response.ok) {
+          toast.info(
+            `Batch started: syncing ${targets.length} service(s) in ${profile.name}. Watch live updates…`,
+          );
+          // ❗ לא עושים fetchProfiles כאן — ה-WS יעדכן בסוף באץ'
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          toast.error(
+            `Failed to start sync: ${errorData.error || "Unknown error"}`,
+          );
+        }
+      } catch (error) {
+        toast.error("Network error. Unable to start sync.");
+      } finally {
+        selectedProfile.value = null;
       }
     };
-    onMounted(fetchProfiles);
+
+    const cancelSyncAll = () => {
+      showSyncAllModal.value = false;
+      selectedProfile.value = null;
+    };
+
+    onMounted(async () => {
+      await fetchProfiles();
+
+      // ✅ subscribe to WS events (connection already created in main.ts)
+      unsubs = [
+        websocketClient.on("BATCH_SYNC_STARTED", (p) => {
+          toast.info(
+            `Batch sync started (${p?.total ?? "?"}) in ${p?.namespace ?? ""}`,
+          );
+        }),
+
+        websocketClient.on("SYNC_STARTED", (p) => {
+          // אם זה מציף, תחליף ל-console.log
+          toast.info(`Sync started: ${p?.serviceName ?? ""}`);
+        }),
+
+        websocketClient.on("SYNC_STEP", (p) => {
+          // עדיף לא טוסטים לכל step
+          console.log("SYNC_STEP:", p);
+        }),
+
+        websocketClient.on("SYNC_COMPLETE", (p) => {
+          const name = p?.serviceName ?? "";
+          if (p?.status === "success") {
+            toast.success(`✅ ${name} synced`);
+          } else {
+            toast.error(`❌ ${name} failed: ${p?.error ?? "Unknown error"}`);
+          }
+          // ⚠️ לא מרעננים פה אוטומטית אם זה באץ' — זה כבד.
+          // אם זה sync יחיד, SERVICE_SYNCED / BATCH_SYNC_COMPLETE יטפלו ברענון.
+        }),
+
+        websocketClient.on("SERVICE_SYNCED", async () => {
+          // ✅ מצוין ל-sync יחיד (או אם אתה רוצה רענון מיידי)
+          // אם זה כבד, אפשר להסיר ולהסתמך רק על BATCH_SYNC_COMPLETE
+          await fetchProfiles();
+        }),
+
+        websocketClient.on("BATCH_SYNC_COMPLETE", async (p) => {
+          toast.success(
+            `Batch complete: ${p?.successCount ?? 0} ok, ${p?.errorCount ?? 0} failed`,
+          );
+          await fetchProfiles(); // ✅ רענון אחד בסוף הבאץ'
+        }),
+      ];
+    });
+
+    onBeforeUnmount(() => {
+      // ✅ cleanup listeners only (DO NOT disconnect global websocket)
+      unsubs.forEach((u) => u && u());
+      unsubs = [];
+    });
 
     return {
       profiles,
@@ -331,10 +473,16 @@ export default defineComponent({
       filteredProfiles,
       syncService,
       syncAllServices,
+      showSyncAllModal,
+      selectedProfile,
+      servicesToSync,
+      confirmSyncAll,
+      cancelSyncAll,
     };
   },
 });
 </script>
+
 
 <style scoped>
 /* Additional custom styles can be added here */

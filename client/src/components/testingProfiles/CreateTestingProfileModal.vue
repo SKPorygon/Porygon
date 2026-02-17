@@ -145,7 +145,7 @@
         }
   
         try {
-          const response = await fetch(`${getConfig().apiUrl}/testing-profiles`, {
+          const response = await fetch(`http://${getConfig().urlHost}/api/testing-profiles`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

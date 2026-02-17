@@ -179,7 +179,7 @@ export default {
     const fetchPermissions = async () => {
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/profiles/${props.profileId}/permissions`,
+          `http://${getConfig().urlHost}/api/profiles/${props.profileId}/permissions`,
           {
             headers: { Authorization: `Bearer ${userStore.token}` },
           }
@@ -207,7 +207,7 @@ export default {
 
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/profiles/${props.profileId}/permissions`,
+          `http://${getConfig().urlHost}/api/profiles/${props.profileId}/permissions`,
           {
             method: "POST",
             headers: {
@@ -239,7 +239,7 @@ export default {
     const removePermission = async (userId) => {
       try {
         await fetch(
-          `${getConfig().apiUrl}/profiles/${props.profileId}/permissions/${userId}`,
+          `http://${getConfig().urlHost}/api/profiles/${props.profileId}/permissions/${userId}`,
           {
             method: "DELETE",
             headers: { Authorization: `Bearer ${userStore.token}` },

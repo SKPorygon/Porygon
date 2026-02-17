@@ -200,7 +200,7 @@ export default defineComponent({
     const fetchProfile = async () => {
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/profiles/${route.params.id}`,
+          `http://${getConfig().urlHost}/api/profiles/${route.params.id}`,
           {
             method: "GET",
             headers: {
@@ -236,7 +236,7 @@ export default defineComponent({
     const saveProfile = async () => {
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/profiles/${route.params.id}`,
+          `http://${getConfig().urlHost}/api/profiles/${route.params.id}`,
           {
             method: "PUT",
             headers: {

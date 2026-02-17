@@ -83,7 +83,7 @@ export default {
   methods: {
     async handleLogin() {
       try {
-        const response = await fetch(`${getConfig().apiUrl}/auth/login`, {
+        const response = await fetch(`http://${getConfig().urlHost}/api/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(this.form),
