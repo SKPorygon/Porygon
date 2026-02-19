@@ -12,6 +12,29 @@
             <h1 class="text-4xl font-extrabold mb-2">Browse All Profiles</h1>
             <p class="text-blue-100">Discover and request access to profiles</p>
           </div>
+          <router-link
+            to="/requests"
+            class="bg-blue-500 hover:bg-blue-400 text-white px-6 py-3 rounded-lg transition-all font-medium flex items-center shadow-lg hover:shadow-xl relative"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            View My Requests
+            <span v-if="pendingRequestsCount > 0" class="absolute -top-2 -right-2 bg-amber-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold">
+              {{ pendingRequestsCount > 9 ? '9+' : pendingRequestsCount }}
+            </span>
+          </router-link>
         </div>
 
         <!-- Search -->
@@ -117,8 +140,8 @@
               
               <!-- Request pending -->
               <div v-else-if="profile.requestPending" class="mt-4">
-                <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                  <div class="flex items-center justify-center mb-2">
+                <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <div class="flex items-center justify-center mb-3">
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
                       class="h-5 w-5 text-amber-600 mr-2 animate-pulse"
@@ -137,9 +160,29 @@
                       Request Pending Approval
                     </p>
                   </div>
-                  <p class="text-xs text-amber-600">
+                  <p class="text-xs text-amber-600 text-center mb-3">
                     Waiting for admin approval...
                   </p>
+                  <router-link
+                    to="/requests"
+                    class="block w-full text-center bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all font-medium text-sm flex items-center justify-center"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-4 w-4 mr-2"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                    View Request Status
+                  </router-link>
                 </div>
               </div>
               
@@ -206,6 +249,7 @@ export default {
     const userStore = useUserStore();
     const requestRoles = ref({});
     const pendingRequests = ref(new Set());
+    const pendingRequestsCount = ref(0);
 
     const fetchProfiles = async () => {
       try {
@@ -222,6 +266,10 @@ export default {
           const data = await response.json();
           // Backend now includes requestPending, so we can use it directly
           profiles.value = data;
+          // Count pending requests
+          pendingRequestsCount.value = data.filter(
+            (p) => p.requestPending
+          ).length;
         } else {
           toast.error("Failed to fetch profiles. Please check your connection.");
         }
@@ -230,6 +278,28 @@ export default {
         toast.error("Network error. Unable to fetch profiles.");
       } finally {
         loading.value = false;
+      }
+    };
+
+    const fetchPendingRequestsCount = async () => {
+      try {
+        const response = await fetch(
+          `http://${getConfig().urlHost}/api/profiles/requests/history`,
+          {
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const requests = await response.json();
+          pendingRequestsCount.value = requests.filter(
+            (req) => req.status === "pending"
+          ).length;
+        }
+      } catch (error) {
+        console.error("Error fetching pending requests count:", error);
       }
     };
 
@@ -288,6 +358,7 @@ export default {
 
     onMounted(() => {
       fetchProfiles();
+      fetchPendingRequestsCount();
     });
 
     return {
@@ -298,6 +369,7 @@ export default {
       requestToJoin,
       requestRoles,
       pendingRequests,
+      pendingRequestsCount,
     };
   },
 };

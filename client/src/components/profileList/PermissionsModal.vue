@@ -107,38 +107,87 @@
             </p>
 
             <!-- Pending Requests Section -->
-            <section v-if="canUserEditProfile() && pendingRequests.length" class="space-y-4 mt-6">
-              <h3
-                class="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3"
-              >
-                Pending Join Requests
-              </h3>
-              <div class="grid gap-3">
+            <section v-if="canUserEditProfile()" class="space-y-4 mt-6">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-semibold text-gray-700 dark:text-gray-300">
+                  Pending Join Requests
+                  <span v-if="pendingRequests.length" class="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                    {{ pendingRequests.length }}
+                  </span>
+                </h3>
+                <div v-if="selectedRequests.length > 0" class="flex items-center space-x-2">
+                  <span class="text-sm text-gray-600">{{ selectedRequests.length }} selected</span>
+                  <button
+                    @click="bulkApprove"
+                    class="text-green-600 hover:text-green-700 bg-green-50 dark:bg-green-900/20 p-2 rounded-full hover:bg-green-100 transition-colors"
+                    :title="`Approve ${selectedRequests.length} request(s)`"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    @click="bulkReject"
+                    class="text-red-500 hover:text-red-700 bg-red-50 dark:bg-red-900/20 p-2 rounded-full hover:bg-red-100 transition-colors"
+                    :title="`Reject ${selectedRequests.length} request(s)`"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div v-if="pendingRequests.length" class="grid gap-3">
                 <div
                   v-for="request in pendingRequests"
                   :key="request._id"
-                  class="flex items-center justify-between bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg shadow-sm border border-yellow-200 dark:border-yellow-800"
+                  class="flex items-center space-x-3 bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg shadow-sm border border-amber-200 dark:border-amber-800"
+                  :class="{ 'ring-2 ring-blue-500': selectedRequests.includes(request._id) }"
                 >
-                  <div class="flex items-center space-x-4">
+                  <input
+                    type="checkbox"
+                    :value="request._id"
+                    v-model="selectedRequests"
+                    class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <div class="flex items-center space-x-4 flex-1">
                     <div
-                      class="w-10 h-10 bg-yellow-100 dark:bg-yellow-900 rounded-full flex items-center justify-center"
+                      class="w-10 h-10 bg-amber-100 dark:bg-amber-900 rounded-full flex items-center justify-center flex-shrink-0"
                     >
-                      <span class="text-yellow-600 dark:text-yellow-300 font-bold">
+                      <span class="text-amber-600 dark:text-amber-300 font-bold">
                         {{
                           (request.user.name ||
                             request.user.email)[0].toUpperCase()
                         }}
                       </span>
                     </div>
-                    <div>
-                      <p class="font-medium text-gray-800 dark:text-gray-200">
+                    <div class="flex-1 min-w-0">
+                      <p class="font-medium text-gray-800 dark:text-gray-200 truncate">
                         {{ request.user.name || request.user.email }}
                       </p>
-                      <div class="flex items-center space-x-2 mt-1">
+                      <div class="flex items-center space-x-2 mt-1 flex-wrap">
                         <span
-                          class="text-sm capitalize px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
+                          class="text-sm capitalize px-2 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300"
                         >
-                          Requested: {{ request.requestedRole }}
+                          {{ request.requestedRole }}
                         </span>
                         <span class="text-xs text-gray-500">
                           {{ formatDate(request.requestedAt) }}
@@ -146,7 +195,7 @@
                       </div>
                     </div>
                   </div>
-                  <div class="flex space-x-2">
+                  <div class="flex space-x-2 flex-shrink-0">
                     <button
                       @click="approveRequest(request._id)"
                       class="text-green-600 hover:text-green-700 bg-green-50 dark:bg-green-900/20 p-2 rounded-full hover:bg-green-100 transition-colors"
@@ -186,18 +235,37 @@
                   </div>
                 </div>
               </div>
+              <p v-else class="text-gray-500 dark:text-gray-400 text-center py-4 text-sm">
+                No pending requests
+              </p>
             </section>
-            <p v-if="canUserEditProfile() && pendingRequests.length === 0" class="text-gray-500 dark:text-gray-400 text-center py-4 text-sm">
-              No pending requests
-            </p>
           </div>
 
-          <!-- Add User Section -->
+          <!-- Add User / Invite Section -->
           <div
             v-if="canUserEditProfile()"
-            class="p-6 pt-0 border-t dark:border-gray-700"
+            class="p-6 pt-0 border-t dark:border-gray-700 space-y-4"
           >
-            <div class="flex space-x-3">
+            <!-- Tabs -->
+            <div class="flex border-b dark:border-gray-600">
+              <button
+                @click="addUserMode = 'add'"
+                class="px-4 py-2 font-medium text-sm transition"
+                :class="addUserMode === 'add' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'"
+              >
+                Add Existing User
+              </button>
+              <button
+                @click="addUserMode = 'invite'"
+                class="px-4 py-2 font-medium text-sm transition"
+                :class="addUserMode === 'invite' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'"
+              >
+                Invite by Email
+              </button>
+            </div>
+
+            <!-- Add Existing User -->
+            <div v-if="addUserMode === 'add'" class="flex space-x-3">
               <input
                 v-model="newUserName"
                 type="text"
@@ -219,6 +287,46 @@
                 :disabled="!newUserName.trim()"
               >
                 Add User
+              </button>
+            </div>
+
+            <!-- Invite by Email -->
+            <div v-else class="flex space-x-3">
+              <input
+                v-model="inviteEmail"
+                type="email"
+                placeholder="Enter user email"
+                class="flex-grow border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 transition-all"
+                :class="{ 'border-red-500': validationError }"
+              />
+              <select
+                v-model="inviteRole"
+                class="border dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 rounded-lg px-3 py-3 focus:ring-2 focus:ring-blue-500 transition-all"
+              >
+                <option value="viewer">Viewer</option>
+                <option value="editor">Editor</option>
+                <option v-if="isUserAdmin()" value="admin">Admin</option>
+              </select>
+              <button
+                @click="inviteUser"
+                class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                :disabled="!inviteEmail.trim()"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-5 w-5 mr-2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+                Invite
               </button>
             </div>
             <p v-if="validationError" class="text-red-500 text-sm mt-2 ml-1">
@@ -256,8 +364,12 @@ export default {
   setup(props, { emit }) {
     const permissions = ref([]);
     const pendingRequests = ref([]);
+    const selectedRequests = ref([]);
     const newUserName = ref("");
     const newUserRole = ref("viewer");
+    const inviteEmail = ref("");
+    const inviteRole = ref("viewer");
+    const addUserMode = ref("add");
     const validationError = ref("");
     const userStore = useUserStore();
     const toast = useToast();
@@ -361,6 +473,122 @@ export default {
       }
     };
 
+    const bulkApprove = async () => {
+      if (selectedRequests.value.length === 0) return;
+      
+      try {
+        const response = await fetch(
+          `http://${getConfig().urlHost}/api/profiles/${props.profileId}/requests/bulk-approve`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              requestIds: selectedRequests.value,
+            }),
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          toast.success(`Approved ${data.results.approved.length} request(s)`);
+          selectedRequests.value = [];
+          await fetchPendingRequests();
+          await fetchPermissions();
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          toast.error(errorData.error || "Failed to approve requests");
+        }
+      } catch (error) {
+        console.error("Error bulk approving:", error);
+        toast.error("Network error. Please try again.");
+      }
+    };
+
+    const bulkReject = async () => {
+      if (selectedRequests.value.length === 0) return;
+      
+      if (!confirm(`Are you sure you want to reject ${selectedRequests.value.length} request(s)?`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch(
+          `http://${getConfig().urlHost}/api/profiles/${props.profileId}/requests/bulk-reject`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              requestIds: selectedRequests.value,
+            }),
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          toast.success(`Rejected ${data.results.rejected.length} request(s)`);
+          selectedRequests.value = [];
+          await fetchPendingRequests();
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          toast.error(errorData.error || "Failed to reject requests");
+        }
+      } catch (error) {
+        console.error("Error bulk rejecting:", error);
+        toast.error("Network error. Please try again.");
+      }
+    };
+
+    const inviteUser = async () => {
+      validationError.value = "";
+
+      if (!inviteEmail.value.trim()) {
+        validationError.value = "Please enter an email address";
+        return;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(inviteEmail.value)) {
+        validationError.value = "Please enter a valid email address";
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `http://${getConfig().urlHost}/api/profiles/${props.profileId}/invite`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: inviteEmail.value,
+              role: inviteRole.value,
+            }),
+          }
+        );
+
+        if (response.ok) {
+          toast.success(`User invited successfully!`);
+          inviteEmail.value = "";
+          inviteRole.value = "viewer";
+          await fetchPermissions();
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          validationError.value = errorData.error || "Failed to invite user";
+        }
+      } catch (error) {
+        console.error("Error inviting user:", error);
+        validationError.value = "Network error. Please try again.";
+      }
+    };
+
     const formatDate = (dateString) => {
       const date = new Date(dateString);
       return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -451,12 +679,19 @@ export default {
     return {
       permissions,
       pendingRequests,
+      selectedRequests,
       newUserName,
       newUserRole,
+      inviteEmail,
+      inviteRole,
+      addUserMode,
       addPermission,
       removePermission,
       approveRequest,
       rejectRequest,
+      bulkApprove,
+      bulkReject,
+      inviteUser,
       formatDate,
       close,
       validationError,

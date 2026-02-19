@@ -485,6 +485,251 @@ export const approveJoinRequest = async (req: MyUserRequest, res: Response) => {
   }
 };
 
+// Get user's own request history
+export const getUserRequestHistory = async (req: MyUserRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    const requests = await ProfileJoinRequest.find({
+      user: userId,
+    })
+      .populate("profile", "name namespace")
+      .populate({
+        path: "reviewedBy",
+        select: "name email",
+        model: "User",
+      })
+      .sort({ requestedAt: -1 });
+
+    return res.status(200).json(requests);
+  } catch (error) {
+    console.error("Error fetching user request history:", error);
+    return res.status(500).json({ error: "An error occurred while fetching request history." });
+  }
+};
+
+// Bulk approve requests (admin/editor only)
+export const bulkApproveRequests = async (req: MyUserRequest, res: Response) => {
+  try {
+    const { profileId } = req.params;
+    const { requestIds } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    if (!Array.isArray(requestIds) || requestIds.length === 0) {
+      return res.status(400).json({ error: "Request IDs array is required." });
+    }
+
+    const profile = await Profile.findById(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found." });
+    }
+
+    // Check if user has admin or editor access
+    if (!hasAdminOrEditorAccess(profile, userId)) {
+      return res.status(403).json({ error: "You don't have permission to approve requests for this profile." });
+    }
+
+    const requests = await ProfileJoinRequest.find({
+      _id: { $in: requestIds },
+      profile: profileId,
+      status: "pending",
+    }).populate("user", "name email");
+
+    const results = {
+      approved: [] as any[],
+      failed: [] as any[],
+    };
+
+    for (const request of requests) {
+      try {
+        const populatedUser = request.user as any;
+        
+        // Check if user is already in the profile
+        const existingPermission = profile.permissions.find(
+          (perm) => perm.user.toString() === populatedUser._id.toString()
+        );
+        
+        if (!existingPermission) {
+          // Add user to profile permissions
+          profile.permissions.push({
+            user: populatedUser._id,
+            role: request.requestedRole,
+          });
+        }
+
+        // Update request status
+        request.status = "approved";
+        request.reviewedAt = new Date();
+        request.reviewedBy = new mongoose.Types.ObjectId(userId as string);
+        await request.save();
+
+        results.approved.push({
+          requestId: request._id,
+          userName: populatedUser.name || populatedUser.email || "Unknown",
+          role: request.requestedRole,
+        });
+      } catch (error) {
+        results.failed.push({
+          requestId: request._id,
+          error: "Failed to approve request",
+        });
+      }
+    }
+
+    await profile.save();
+
+    return res.status(200).json({
+      message: `Approved ${results.approved.length} request(s)`,
+      results,
+    });
+  } catch (error) {
+    console.error("Error bulk approving requests:", error);
+    return res.status(500).json({ error: "An error occurred while bulk approving requests." });
+  }
+};
+
+// Bulk reject requests (admin/editor only)
+export const bulkRejectRequests = async (req: MyUserRequest, res: Response) => {
+  try {
+    const { profileId } = req.params;
+    const { requestIds } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    if (!Array.isArray(requestIds) || requestIds.length === 0) {
+      return res.status(400).json({ error: "Request IDs array is required." });
+    }
+
+    const profile = await Profile.findById(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found." });
+    }
+
+    // Check if user has admin or editor access
+    if (!hasAdminOrEditorAccess(profile, userId)) {
+      return res.status(403).json({ error: "You don't have permission to reject requests for this profile." });
+    }
+
+    const requests = await ProfileJoinRequest.find({
+      _id: { $in: requestIds },
+      profile: profileId,
+      status: "pending",
+    });
+
+    const results = {
+      rejected: [] as any[],
+      failed: [] as any[],
+    };
+
+    for (const request of requests) {
+      try {
+        request.status = "rejected";
+        request.reviewedAt = new Date();
+        request.reviewedBy = new mongoose.Types.ObjectId(userId as string);
+        await request.save();
+
+        results.rejected.push({
+          requestId: request._id,
+        });
+      } catch (error) {
+        results.failed.push({
+          requestId: request._id,
+          error: "Failed to reject request",
+        });
+      }
+    }
+
+    return res.status(200).json({
+      message: `Rejected ${results.rejected.length} request(s)`,
+      results,
+    });
+  } catch (error) {
+    console.error("Error bulk rejecting requests:", error);
+    return res.status(500).json({ error: "An error occurred while bulk rejecting requests." });
+  }
+};
+
+// Invite user to profile (admin/editor only) - creates request automatically approved
+export const inviteUserToProfile = async (req: MyUserRequest, res: Response) => {
+  try {
+    const { profileId } = req.params;
+    const { email, role } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User not authenticated" });
+    }
+
+    if (!email || !role) {
+      return res.status(400).json({ error: "Email and role are required." });
+    }
+
+    const profile = await Profile.findById(profileId);
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found." });
+    }
+
+    // Check if user has admin or editor access
+    if (!hasAdminOrEditorAccess(profile, userId)) {
+      return res.status(403).json({ error: "You don't have permission to invite users to this profile." });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ error: "User not found with this email." });
+    }
+
+    // Check if user already has access
+    const existingPermission = profile.permissions.find(
+      (perm) => perm.user.toString() === user._id.toString()
+    );
+    if (existingPermission) {
+      return res.status(400).json({ error: "User already has access to this profile." });
+    }
+
+    // Add user to profile permissions directly (auto-approved invite)
+    profile.permissions.push({
+      user: user._id,
+      role,
+    });
+    await profile.save();
+
+    // Create an approved request record for history
+    const inviteRequest = await ProfileJoinRequest.create({
+      profile: profileId,
+      user: user._id,
+      requestedRole: role,
+      status: "approved",
+      reviewedAt: new Date(),
+      reviewedBy: new mongoose.Types.ObjectId(userId as string),
+    });
+
+    const populatedRequest = await ProfileJoinRequest.findById(inviteRequest._id)
+      .populate("user", "name email")
+      .populate("profile", "name");
+
+    return res.status(201).json({
+      message: "User invited successfully",
+      request: populatedRequest,
+    });
+  } catch (error) {
+    console.error("Error inviting user:", error);
+    return res.status(500).json({ error: "An error occurred while inviting the user." });
+  }
+};
+
 // Reject a join request (admin/editor only)
 export const rejectJoinRequest = async (req: MyUserRequest, res: Response) => {
   try {
