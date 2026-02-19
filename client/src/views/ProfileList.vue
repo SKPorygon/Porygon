@@ -227,6 +227,31 @@
           :failing-services="batchSummaryData?.failingServices || []"
           @close="showBatchSummaryModal = false"
         />
+        <!-- Inactivity modal: after 5 min with no activity, offer to refresh -->
+        <div
+          v-if="showInactivityModal"
+          class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+          @click.self="refreshPage"
+        >
+          <div class="bg-white rounded-xl shadow-2xl max-w-md mx-4 p-6 text-center">
+            <div class="text-amber-500 mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-800 mb-2">You've been inactive</h3>
+            <p class="text-gray-600 mb-6">
+              You haven't interacted with this page for a while. Refresh to get the latest profiles and sync status.
+            </p>
+            <button
+              type="button"
+              @click="refreshPage"
+              class="w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition"
+            >
+              Refresh page
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -290,6 +315,33 @@ export default defineComponent({
       errorCount: 0,
       failingServices: [],
     });
+
+    const showInactivityModal = ref(false);
+    const INACTIVITY_MS = 5 * 60 * 1000; // 5 minutes
+    let inactivityTimerId = null;
+
+    const refreshPage = () => {
+      window.location.reload();
+    };
+
+    const resetInactivityTimer = () => {
+      if (showInactivityModal.value) return;
+      if (inactivityTimerId) clearTimeout(inactivityTimerId);
+      inactivityTimerId = setTimeout(() => {
+        showInactivityModal.value = true;
+        inactivityTimerId = null;
+      }, INACTIVITY_MS);
+    };
+
+    const clearInactivityTimer = () => {
+      if (inactivityTimerId) {
+        clearTimeout(inactivityTimerId);
+        inactivityTimerId = null;
+      }
+    };
+
+    const activityEvents = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"];
+    const onActivity = () => resetInactivityTimer();
 
     // ✅ keep unsubscribers so we can cleanup
     let unsubs = [];
@@ -536,6 +588,8 @@ export default defineComponent({
 
     onMounted(async () => {
       await fetchProfiles();
+      resetInactivityTimer();
+      activityEvents.forEach((ev) => window.addEventListener(ev, onActivity));
 
       // ✅ subscribe to WS events (connection already created in main.ts)
       unsubs = [
@@ -801,6 +855,8 @@ export default defineComponent({
     });
 
     onBeforeUnmount(() => {
+      clearInactivityTimer();
+      activityEvents.forEach((ev) => window.removeEventListener(ev, onActivity));
       // ✅ cleanup listeners only (DO NOT disconnect global websocket)
       unsubs.forEach((u) => u && u());
       unsubs = [];
@@ -835,6 +891,8 @@ export default defineComponent({
       showBatchSummaryModal,
       batchSummaryData,
       handleDontShowAgain,
+      showInactivityModal,
+      refreshPage,
     };
   },
 });
