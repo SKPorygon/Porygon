@@ -260,7 +260,7 @@ export default defineComponent({
 
     const fetchProfiles = async () => {
       try {
-        const response = await fetch(`${getConfig().apiUrl}/profiles`);
+        const response = await fetch(`http://${getConfig().urlHost}/api/profiles`);
         if (response.ok) {
           profiles.value = (await response.json()).map((profile: any) => ({
             ...profile,
@@ -352,7 +352,7 @@ export default defineComponent({
       const namespace = modalProfile.value.namespace;
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/services/update-testing`,
+          `http://${getConfig().urlHost}/api/services/update-testing`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -391,7 +391,7 @@ export default defineComponent({
     const removeServiceFromTest = async (profile: any, service: any) => {
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/services/update-testing`,
+          `http://${getConfig().urlHost}/api/services/update-testing`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -424,7 +424,7 @@ export default defineComponent({
       const servicesToRemove = group;
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/services/update-testing`,
+          `http://${getConfig().urlHost}/api/services/update-testing`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

@@ -13,6 +13,7 @@
     "@vueuse/core": "^12.4.0",
     "lodash.debounce": "^4.0.8",
     "pinia": "^2.3.1",
+    "socket.io-client": "^4.8.3",
     "vee-validate": "^4.15.0",
     "vue": "^3.5.13",
     "vue-json-pretty": "^2.4.0",

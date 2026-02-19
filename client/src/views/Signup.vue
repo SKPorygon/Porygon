@@ -99,7 +99,7 @@ export default {
     async handleSignUp() {
       try {
         // Send sign-up request
-        const response = await fetch(`${getConfig().apiUrl}/auth/register`, {
+        const response = await fetch(`http://${getConfig().urlHost}/api/auth/register`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(this.form),

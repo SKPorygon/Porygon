@@ -63,7 +63,7 @@
         this.loading = true;
         try {
           const response = await fetch(
-            `${getConfig().apiUrl}/sync-logs?profileName=${encodeURIComponent(
+            `http://${getConfig().urlHost}/api/sync-logs?profileName=${encodeURIComponent(
               this.profileName
             )}`
           );

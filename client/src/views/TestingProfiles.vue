@@ -288,7 +288,7 @@ export default {
 
     const fetchProfiles = async () => {
       try {
-        const response = await fetch(`${getConfig().apiUrl}/profiles`, {
+        const response = await fetch(`http://${getConfig().urlHost}/api/profiles`, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${userStore.token}`,
@@ -356,7 +356,7 @@ export default {
 
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/testing-profiles`,
+          `http://${getConfig().urlHost}/api/testing-profiles`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -399,7 +399,7 @@ export default {
       try {
         const endpoint = testingProfile.isActive ? "deactivate" : "activate";
         const response = await fetch(
-          `${getConfig().apiUrl}/testing-profiles/${endpoint}`,
+          `http://${getConfig().urlHost}/api/testing-profiles/${endpoint}`,
           {
             method: "POST",
             headers: {
@@ -415,7 +415,7 @@ export default {
 
         if (response.ok) {
           const updatedProfileResponse = await fetch(
-            `${getConfig().apiUrl}/profiles/${profile._id}`,
+            `http://${getConfig().urlHost}/api/profiles/${profile._id}`,
             {
               method: "GET",
               headers: {
@@ -453,7 +453,7 @@ export default {
     const deleteTestingProfile = async (profile, testingProfile) => {
       try {
         const response = await fetch(
-          `${getConfig().apiUrl}/testing-profiles/${testingProfile._id}`,
+          `http://${getConfig().urlHost}/api/testing-profiles/${testingProfile._id}`,
           {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
