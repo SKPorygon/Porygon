@@ -7,6 +7,13 @@ import { PostSyncHealthGuard } from "../services/openshift/PostSyncHealthGuard";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// In-memory batch cancel: client can request cancel and the running batch loop will stop
+let currentBatchId: string | null = null;
+let cancelRequestedForBatchId: string | null = null;
+let batchPausedForDecision: string | null = null; // batchId that is paused waiting for user decision
+let batchResumed: string | null = null; // batchId that user chose to continue
+let hadResumeThisBatch = false; // user clicked Continue this batch → always send a summary at end even if re-check passed
+
 export const fetchNamespaceDeployments = async (
   req: Request,
   res: Response,
@@ -134,16 +141,25 @@ export const handleMultipleSyncService = async (
   const config: KubernetesConfig = { token: saToken, clusterUrl };
   const deploymentService = new DeploymentService(config);
 
+  const batchId = `${namespace}-${Date.now()}`;
+  currentBatchId = batchId;
+  cancelRequestedForBatchId = null;
+  batchPausedForDecision = null;
+  batchResumed = null;
+  hadResumeThisBatch = false;
+
   // ✅ response once
   res.status(202).json({
     message: "Smart batch sync started",
     total: servicesData.length,
+    batchId,
   });
 
   websocketManager.broadcast("BATCH_SYNC_STARTED", {
     namespace,
     total: servicesData.length,
     mode: "SMART_ROLLOUT_GUARD",
+    batchId,
   });
 
   let successCount = 0;
@@ -154,6 +170,15 @@ export const handleMultipleSyncService = async (
   const healthGuard = new PostSyncHealthGuard(config, websocketManager);
 
   for (const service of servicesData) {
+    if (cancelRequestedForBatchId === batchId) {
+      websocketManager.broadcast("BATCH_SYNC_CANCELLED", {
+        namespace,
+        batchId,
+        message: "Batch sync was cancelled by user",
+      });
+      break;
+    }
+
     const serviceName = service?.name;
     const desiredVersion = service?.desiredVersion;
     const desiredPodCount = service?.desiredPodCount;
@@ -233,7 +258,38 @@ export const handleMultipleSyncService = async (
             namespace,
             serviceName,
             report: healthReport,
+            batchId,
+            isFirstAlertInBatch: batchPausedForDecision === null,
           });
+
+          // Pause batch on first health alert to wait for user decision
+          if (batchPausedForDecision === null && currentBatchId === batchId) {
+            batchPausedForDecision = batchId;
+            websocketManager.broadcast("BATCH_SYNC_PAUSED", {
+              namespace,
+              batchId,
+              serviceName,
+              message: "Batch sync paused waiting for user decision",
+            });
+
+            // Wait for user decision (resume or cancel)
+            while (
+              batchPausedForDecision === batchId &&
+              cancelRequestedForBatchId !== batchId &&
+              batchResumed !== batchId
+            ) {
+              await sleep(500); // Poll every 500ms
+            }
+
+            // If cancelled, break out of service loop
+            if (cancelRequestedForBatchId === batchId) {
+              break;
+            }
+
+            // If resumed, continue with next service
+            batchPausedForDecision = null;
+            batchResumed = null;
+          }
         }
       } catch (healthError: any) {
         console.warn(`Health check failed for ${serviceName}:`, healthError);
@@ -258,7 +314,35 @@ export const handleMultipleSyncService = async (
           namespace,
           serviceName,
           report: errorReport,
+          batchId,
+          isFirstAlertInBatch: batchPausedForDecision === null,
         });
+
+        // Pause batch on first health alert (even if health check itself failed)
+        if (batchPausedForDecision === null && currentBatchId === batchId) {
+          batchPausedForDecision = batchId;
+          websocketManager.broadcast("BATCH_SYNC_PAUSED", {
+            namespace,
+            batchId,
+            serviceName,
+            message: "Batch sync paused waiting for user decision",
+          });
+
+          while (
+            batchPausedForDecision === batchId &&
+            cancelRequestedForBatchId !== batchId &&
+            batchResumed !== batchId
+          ) {
+            await sleep(500);
+          }
+
+          if (cancelRequestedForBatchId === batchId) {
+            break;
+          }
+
+          batchPausedForDecision = null;
+          batchResumed = null;
+        }
       }
 
       successCount++;
@@ -281,22 +365,37 @@ export const handleMultipleSyncService = async (
     await sleep(BETWEEN_SERVICES_DELAY_MS);
   }
 
-  // Send batch health summary
+  currentBatchId = null;
+  cancelRequestedForBatchId = null;
+  batchPausedForDecision = null;
+  batchResumed = null;
+
+  // Send batch health summary when there are failing services OR user had clicked Continue (so they get a report even if re-check passed)
   const failingServices = healthReports.filter(
     (hr) => hr.report.severity === "error" || hr.report.severity === "warning"
   );
-  if (failingServices.length > 0) {
-    websocketManager.broadcast("BATCH_HEALTH_SUMMARY", {
+  const shouldSendSummary = failingServices.length > 0 || hadResumeThisBatch;
+  if (shouldSendSummary) {
+    const summaryPayload = {
+      batchId,
       namespace,
       total: servicesData.length,
+      successCount,
+      errorCount,
+      hadResumeThisBatch: hadResumeThisBatch && failingServices.length === 0,
       failingServices: failingServices.map((hr) => ({
         serviceName: hr.serviceName,
         severity: hr.report.severity,
         summary: hr.report.summary,
-        issueCount: hr.report.issues.length,
+        issueCount: hr.report.issues?.length ?? 0,
+        report: hr.report,
       })),
-    });
+    };
+    console.log("[BATCH_REPORT] Sending BATCH_HEALTH_SUMMARY once, batchId:", batchId, "failingCount:", failingServices.length, "hadResume:", hadResumeThisBatch);
+    websocketManager.broadcast("BATCH_HEALTH_SUMMARY", summaryPayload);
   }
+  hadResumeThisBatch = false;
+  console.log("[BATCH_REPORT] Sending BATCH_SYNC_COMPLETE, batchId:", batchId);
 
   websocketManager.broadcast("BATCH_SYNC_COMPLETE", {
     namespace,
@@ -304,5 +403,29 @@ export const handleMultipleSyncService = async (
     successCount,
     errorCount,
     mode: "SMART_ROLLOUT_GUARD",
+    batchId,
   });
+};
+
+export const handleCancelBatchSync = async (req: Request, res: Response): Promise<void> => {
+  const { batchId } = req.body ?? {};
+  if (batchId && typeof batchId === "string" && currentBatchId === batchId) {
+    cancelRequestedForBatchId = batchId;
+    batchPausedForDecision = null; // Clear pause so loop can exit
+    res.status(200).json({ message: "Cancel requested", batchId });
+  } else {
+    res.status(400).json({ error: "No active batch to cancel or invalid batchId" });
+  }
+};
+
+export const handleResumeBatchSync = async (req: Request, res: Response): Promise<void> => {
+  const batchId = typeof req.body?.batchId === "string" ? req.body.batchId : null;
+  if (batchId && currentBatchId === batchId) {
+    batchResumed = batchId;
+    hadResumeThisBatch = true; // so we send BATCH_HEALTH_SUMMARY at end even if re-check passes
+    batchPausedForDecision = null; // If paused, loop continues; if not yet paused, batchResumed is seen when we enter the loop
+    res.status(200).json({ message: "Resume requested", batchId });
+  } else {
+    res.status(400).json({ error: "No active batch to resume or invalid batchId" });
+  }
 };

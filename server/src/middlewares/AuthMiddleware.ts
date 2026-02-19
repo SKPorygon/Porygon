@@ -7,7 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'leider_leider';
 export const authenticate = (req: MyUserRequest, res: Response, next: NextFunction): Response | void => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  console.log("ashkara ze nihnas! ani mevin, ha token: " + token)
+  // console.log("ashkara ze nihnas! ani mevin, ha token: " + token)
   if (!token) {
     return res.status(401).json({ message: 'No token provided' });
   }

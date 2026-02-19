@@ -130,74 +130,6 @@
             </div>
           </div>
         </div>
-
-        <!-- Suggested Actions -->
-        <div v-if="report.suggestedActions && report.suggestedActions.length > 0">
-          <h3 class="text-lg font-semibold mb-3 text-gray-800">Suggested Actions</h3>
-          <div class="space-y-3">
-            <div
-              v-for="(action, idx) in report.suggestedActions"
-              :key="idx"
-              class="bg-blue-50 border border-blue-200 rounded-lg p-4"
-            >
-              <div class="flex items-start justify-between gap-4">
-                <div class="flex-1">
-                  <h4 class="font-semibold text-blue-900 mb-1">{{ action.title }}</h4>
-                  <p class="text-sm text-gray-700 mb-2">{{ action.description }}</p>
-                  <div
-                    v-if="action.ocCommand"
-                    class="bg-gray-800 text-green-400 font-mono text-xs p-2 rounded flex items-center justify-between gap-2"
-                  >
-                    <code class="flex-1 break-all">{{ action.ocCommand }}</code>
-                    <button
-                      @click="copyToClipboard(action.ocCommand)"
-                      class="bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded text-xs transition-colors"
-                      title="Copy command"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        class="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </button>
-                  </div>
-                  <a
-                    v-if="action.docsHint"
-                    :href="action.docsHint"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-xs text-blue-600 hover:text-blue-800 mt-2 inline-flex items-center gap-1"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-3 w-3"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    Documentation
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       <!-- Footer -->
@@ -225,7 +157,6 @@
 
 <script>
 import { defineComponent, ref, computed } from "vue";
-import { useToast } from "vue-toastification";
 
 export default defineComponent({
   name: "HealthAlertModal",
@@ -241,7 +172,6 @@ export default defineComponent({
   },
   emits: ["close", "dont-show-again"],
   setup(props, { emit }) {
-    const toast = useToast();
     const dontShowAgain = ref(false);
 
     const title = computed(() => {
@@ -260,16 +190,6 @@ export default defineComponent({
       return props.report?.severity || "error";
     });
 
-    const copyToClipboard = async (text) => {
-      try {
-        await navigator.clipboard.writeText(text);
-        toast.success("Command copied to clipboard!");
-      } catch (err) {
-        console.error("Failed to copy:", err);
-        toast.error("Failed to copy command");
-      }
-    };
-
     const handleDismiss = () => {
       if (dontShowAgain.value) {
         emit("dont-show-again", props.report?.serviceName);
@@ -282,7 +202,6 @@ export default defineComponent({
       headerClass,
       headerSeverity,
       dontShowAgain,
-      copyToClipboard,
       handleDismiss,
     };
   },
