@@ -18,6 +18,27 @@
               <i class="fas fa-cubes mr-1"></i>
               Services: {{ profile.services.length }}
             </span>
+            <span
+              v-if="hasHealthIssues"
+              class="text-sm bg-red-100 text-red-700 px-2 py-1 rounded flex items-center gap-1"
+              title="Health issues detected after sync"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              {{ healthIssueCount }} issue(s)
+            </span>
           </div>
         </div>
 
@@ -161,6 +182,10 @@ export default {
       type: String,
       default: "",
     },
+    healthAlerts: {
+      type: Map,
+      default: () => new Map(),
+    },
   },
   setup(props) {
     const showDetails = ref(false);
@@ -226,6 +251,20 @@ export default {
       ).length;
     });
 
+    const hasHealthIssues = computed(() => {
+      if (!props.healthAlerts || props.healthAlerts.size === 0) return false;
+      return props.profile.services.some((service) =>
+        props.healthAlerts.has(service.name)
+      );
+    });
+
+    const healthIssueCount = computed(() => {
+      if (!props.healthAlerts) return 0;
+      return props.profile.services.filter((service) =>
+        props.healthAlerts.has(service.name)
+      ).length;
+    });
+
     return {
       showDetails,
       toggleDetails,
@@ -237,6 +276,8 @@ export default {
       appGroups,
       appGroupOptions,
       filteredServices,
+      hasHealthIssues,
+      healthIssueCount,
     };
   },
 };

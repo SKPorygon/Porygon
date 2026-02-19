@@ -191,6 +191,7 @@
                 :profile="profile"
                 :show-out-of-sync="showOutOfSyncOnly"
                 :service-name-filter="serviceNameFilter"
+                :health-alerts="healthAlerts"
                 @sync-all="syncAllServices"
                 @sync-service="syncService"
               />
@@ -204,6 +205,27 @@
           :services-to-sync="servicesToSync"
           @confirm="confirmSyncAll"
           @cancel="cancelSyncAll"
+        />
+        <HealthAlertModal
+          :show="showHealthAlertModal"
+          :report="currentHealthAlert"
+          @close="showHealthAlertModal = false"
+          @dont-show-again="handleDontShowAgain"
+        />
+        <BatchStopModal
+          :show="showBatchStopModal"
+          :service-name="firstBatchAlertServiceName"
+          @stop="handleBatchStop"
+          @continue="handleBatchContinue"
+        />
+        <BatchSummaryReportModal
+          :show="showBatchSummaryModal"
+          :namespace="batchSummaryData?.namespace || ''"
+          :total="batchSummaryData?.total || 0"
+          :success-count="batchSummaryData?.successCount || 0"
+          :error-count="batchSummaryData?.errorCount || 0"
+          :failing-services="batchSummaryData?.failingServices || []"
+          @close="showBatchSummaryModal = false"
         />
       </div>
     </div>
@@ -224,9 +246,18 @@ import ProfileCard from "../components/profileList/ProfileCard.vue";
 import { useUserStore } from "../store/userStore";
 import { getConfig } from "../config";
 import SyncAllConfirmModal from "../components/profileList/SyncAllConfirmModal.vue";
+import HealthAlertModal from "../components/profileList/HealthAlertModal.vue";
+import BatchStopModal from "../components/profileList/BatchStopModal.vue";
+import BatchSummaryReportModal from "../components/profileList/BatchSummaryReportModal.vue";
 
 export default defineComponent({
-  components: { ProfileCard, SyncAllConfirmModal },
+  components: {
+    ProfileCard,
+    SyncAllConfirmModal,
+    HealthAlertModal,
+    BatchStopModal,
+    BatchSummaryReportModal,
+  },
 
   setup() {
     const toast = useToast();
@@ -239,6 +270,26 @@ export default defineComponent({
     const userStore = useUserStore();
     const showSyncAllModal = ref(false);
     const selectedProfile = ref(null);
+    const healthAlerts = ref(new Map());
+    const currentHealthAlert = ref(null);
+    const showHealthAlertModal = ref(false);
+    const dismissedAlerts = ref(new Set());
+
+    const batchId = ref(null);
+    const lastCompletedBatchId = ref(null); // do NOT clear on STARTED so late BATCH_HEALTH_SUMMARY still matches
+    const lastShownSummaryBatchId = ref(null); // prevent showing same batch summary twice
+    const batchInProgress = ref(false);
+    const showBatchStopModal = ref(false);
+    const firstBatchAlertServiceName = ref("");
+    const batchStopModalAlreadyShownThisBatch = ref(false);
+    const showBatchSummaryModal = ref(false);
+    const batchSummaryData = ref({
+      namespace: "",
+      total: 0,
+      successCount: 0,
+      errorCount: 0,
+      failingServices: [],
+    });
 
     // ✅ keep unsubscribers so we can cleanup
     let unsubs = [];
@@ -326,36 +377,90 @@ export default defineComponent({
       return result;
     });
 
-    const syncService = async (profile, service) => {
+    const handleDontShowAgain = (serviceName) => {
+      dismissedAlerts.value.add(serviceName);
+    };
+
+    const handleBatchStop = async () => {
+      const id = batchId.value;
+      showBatchStopModal.value = false;
+      if (!id) return;
       try {
-        const response = await fetch(
-          `http://${getConfig().urlHost}/api/services/sync`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              namespace: profile.namespace,
-              serviceName: service.name,
-              desiredVersion: service.desiredVersion,
-              desiredPodCount: service.desiredPodCount,
-              saToken: profile.saToken,
-              clusterUrl: profile.clusterUrl,
-            }),
+        await fetch(`http://${getConfig().urlHost}/api/services/sync/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ batchId: id }),
+        });
+        toast.info("Batch sync cancel requested.");
+      } catch (e) {
+        toast.error("Failed to request cancel.");
+      }
+    };
+
+    const handleBatchContinue = async () => {
+      const id = batchId.value;
+      showBatchStopModal.value = false;
+      if (!id) return;
+      try {
+        await fetch(`http://${getConfig().urlHost}/api/services/sync/resume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ batchId: id }),
+        });
+        toast.info("Batch sync continuing...");
+      } catch (e) {
+        toast.error("Failed to request resume.");
+      }
+    };
+
+    const syncService = async (profile, service) => {
+      const payload = {
+        namespace: profile.namespace,
+        serviceName: service.name,
+        desiredVersion: service.desiredVersion,
+        desiredPodCount: service.desiredPodCount,
+        saToken: profile.saToken,
+        clusterUrl: profile.clusterUrl,
+      };
+      // [SYNC_DEBUG] temporary - remove after debugging
+      console.log("[SYNC_DEBUG] client syncService sending:", {
+        namespace: payload.namespace,
+        serviceName: payload.serviceName,
+        desiredVersion: payload.desiredVersion,
+        desiredPodCount: payload.desiredPodCount,
+        hasSaToken: !!payload.saToken,
+        hasClusterUrl: !!payload.clusterUrl,
+        clusterUrl: payload.clusterUrl ? String(payload.clusterUrl).slice(0, 50) + "..." : undefined,
+      });
+      try {
+        const url = `http://${getConfig().urlHost}/api/services/sync`;
+        console.log("[SYNC_DEBUG] client POST url:", url);
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
-        );
+          body: JSON.stringify(payload),
+        });
+
+        console.log("[SYNC_DEBUG] client response:", {
+          ok: response.ok,
+          status: response.status,
+          statusText: response.statusText,
+        });
 
         if (response.ok) {
           toast.info(`Started sync for ${service.name}. Watch live updates…`);
           // ❗ לא עושים fetchProfiles כאן — ה-WS יעדכן
         } else {
           const errorData = await response.json().catch(() => ({}));
+          console.log("[SYNC_DEBUG] client error body:", errorData);
           toast.error(
             `Failed to sync service: ${errorData.error || "Unknown error"}`,
           );
         }
       } catch (error) {
+        console.error("[SYNC_DEBUG] client syncService error:", error);
         toast.error("Network error. Unable to sync service.");
       }
     };
@@ -435,6 +540,24 @@ export default defineComponent({
       // ✅ subscribe to WS events (connection already created in main.ts)
       unsubs = [
         websocketClient.on("BATCH_SYNC_STARTED", (p) => {
+          const newBatchId = p?.batchId ?? null;
+          console.log("[BATCH_REPORT] BATCH_SYNC_STARTED", { newBatchId, hadSummaryModal: showBatchSummaryModal.value });
+          // Do NOT clear lastCompletedBatchId - so a late BATCH_HEALTH_SUMMARY from the previous batch can still be shown
+          batchId.value = newBatchId;
+          batchInProgress.value = true;
+          showBatchStopModal.value = false;
+          batchStopModalAlreadyShownThisBatch.value = false;
+          showBatchSummaryModal.value = false;
+          batchSummaryData.value = {
+            namespace: "",
+            total: 0,
+            successCount: 0,
+            errorCount: 0,
+            failingServices: [],
+          };
+          // Defer clearing healthAlerts so a late BATCH_HEALTH_SUMMARY from previous batch can still build the report
+          setTimeout(() => { healthAlerts.value.clear(); }, 3000);
+          firstBatchAlertServiceName.value = "";
           toast.info(
             `Batch sync started (${p?.total ?? "?"}) in ${p?.namespace ?? ""}`,
           );
@@ -468,10 +591,211 @@ export default defineComponent({
         }),
 
         websocketClient.on("BATCH_SYNC_COMPLETE", async (p) => {
+          const payloadBatchId = p?.batchId ?? null;
+          const currentBatchIdWhenReceived = batchId.value;
+          // Always record which batch completed (so late BATCH_HEALTH_SUMMARY can still match)
+          lastCompletedBatchId.value = payloadBatchId;
+          // Only clear "in progress" state if this COMPLETE is for the batch we think is current
+          if (payloadBatchId === currentBatchIdWhenReceived) {
+            batchInProgress.value = false;
+            batchId.value = null;
+          }
+          console.log("[BATCH_REPORT] BATCH_SYNC_COMPLETE", {
+            payloadBatchId,
+            currentBatchIdWhenReceived,
+            hadStopModal: batchStopModalAlreadyShownThisBatch.value,
+            alreadyShowingSummary: showBatchSummaryModal.value,
+            healthAlertsSize: healthAlerts.value.size,
+          });
           toast.success(
             `Batch complete: ${p?.successCount ?? 0} ok, ${p?.errorCount ?? 0} failed`,
           );
-          await fetchProfiles(); // ✅ רענון אחד בסוף הבאץ'
+          // Fallback: show summary only for the batch that just completed (current) and we didn't already show from BATCH_HEALTH_SUMMARY
+          const alreadyShowedForThisBatch = lastShownSummaryBatchId.value === payloadBatchId;
+          const isCompleteForCurrentBatch = payloadBatchId === currentBatchIdWhenReceived;
+          if (isCompleteForCurrentBatch && batchStopModalAlreadyShownThisBatch.value && !showBatchSummaryModal.value && !alreadyShowedForThisBatch) {
+            const failingFromAlerts = [];
+            if (firstBatchAlertServiceName.value) {
+              const report = healthAlerts.value.get(firstBatchAlertServiceName.value);
+              if (report) {
+                failingFromAlerts.push({
+                  serviceName: firstBatchAlertServiceName.value,
+                  severity: report.severity ?? "warning",
+                  summary: report.summary ?? "Health issue during sync",
+                  issueCount: report.issues?.length ?? 0,
+                  report,
+                });
+              } else {
+                failingFromAlerts.push({
+                  serviceName: firstBatchAlertServiceName.value,
+                  severity: "warning",
+                  summary: "Health issue was reported during sync",
+                  issueCount: 0,
+                  report: { severity: "warning", summary: "Health issue was reported during sync", issues: [] },
+                });
+              }
+            }
+            for (const [name, report] of healthAlerts.value) {
+              if (name !== firstBatchAlertServiceName.value && report) {
+                failingFromAlerts.push({
+                  serviceName: name,
+                  severity: report.severity ?? "warning",
+                  summary: report.summary ?? "Health issue during sync",
+                  issueCount: report.issues?.length ?? 0,
+                  report,
+                });
+              }
+            }
+            if (failingFromAlerts.length > 0) {
+              console.log("[BATCH_REPORT] Showing fallback summary, failingCount:", failingFromAlerts.length);
+              lastShownSummaryBatchId.value = payloadBatchId;
+              batchSummaryData.value = {
+                batchId: payloadBatchId,
+                namespace: p?.namespace ?? "",
+                total: p?.total ?? 0,
+                successCount: p?.successCount ?? 0,
+                errorCount: p?.errorCount ?? 0,
+                failingServices: failingFromAlerts,
+              };
+              showBatchSummaryModal.value = true;
+              healthAlerts.value.clear();
+            } else {
+              console.log("[BATCH_REPORT] Fallback skipped: no failingFromAlerts (healthAlerts may have been cleared)");
+            }
+          }
+          batchStopModalAlreadyShownThisBatch.value = false;
+          firstBatchAlertServiceName.value = "";
+          await fetchProfiles();
+        }),
+
+        websocketClient.on("POST_SYNC_HEALTH_OK", (p) => {
+          // Health check passed - no action needed, just log
+          console.log(`Health check OK for ${p?.serviceName}`);
+        }),
+
+        websocketClient.on("POST_SYNC_HEALTH_ALERT", (p) => {
+          const serviceName = p?.serviceName;
+          const report = p?.report;
+          if (!serviceName || !report) return;
+
+          healthAlerts.value.set(serviceName, report);
+
+          if (batchInProgress.value) {
+            if (!batchStopModalAlreadyShownThisBatch.value) {
+              batchStopModalAlreadyShownThisBatch.value = true;
+              firstBatchAlertServiceName.value = serviceName;
+              showBatchStopModal.value = true;
+              toast.warning(`Health issue in ${serviceName}. You can stop the batch or continue.`, {
+                timeout: 5000,
+              });
+            }
+          } else if (!dismissedAlerts.value.has(serviceName)) {
+            currentHealthAlert.value = report;
+            showHealthAlertModal.value = true;
+            toast.warning(`⚠️ Health issue detected: ${serviceName}`, {
+              timeout: 5000,
+            });
+          }
+        }),
+
+        websocketClient.on("BATCH_HEALTH_SUMMARY", (p) => {
+          const summaryBatchId = p?.batchId ?? null;
+          const failingServices = p?.failingServices || [];
+          const hadResumeNoList = p?.hadResumeThisBatch === true && failingServices.length === 0;
+          // If server sends batchId, only show for current or just-completed batch. If no batchId (old server), show only when no batch in progress (avoid stale report after new batch started).
+          const isForCurrentBatch =
+            summaryBatchId == null
+              ? !batchInProgress.value
+              : summaryBatchId === batchId.value || summaryBatchId === lastCompletedBatchId.value;
+          console.log("[BATCH_REPORT] BATCH_HEALTH_SUMMARY received", {
+            summaryBatchId,
+            currentBatchId: batchId.value,
+            lastCompletedBatchId: lastCompletedBatchId.value,
+            isForCurrentBatch,
+            failingCount: failingServices.length,
+            hadResumeNoList,
+          });
+          if (!isForCurrentBatch) {
+            if (failingServices.length > 0 || hadResumeNoList) {
+              console.log("[BATCH_REPORT] Ignoring stale BATCH_HEALTH_SUMMARY (wrong batch)");
+            }
+            return;
+          }
+          // Never show the same batch's summary twice
+          if (lastShownSummaryBatchId.value === summaryBatchId) {
+            console.log("[BATCH_REPORT] Skipping duplicate BATCH_HEALTH_SUMMARY for same batch (already shown)");
+            return;
+          }
+          if (failingServices.length > 0) {
+            lastShownSummaryBatchId.value = summaryBatchId;
+            batchSummaryData.value = {
+              batchId: summaryBatchId,
+              namespace: p?.namespace ?? "",
+              total: p?.total ?? 0,
+              successCount: p?.successCount ?? 0,
+              errorCount: p?.errorCount ?? 0,
+              failingServices,
+            };
+            showBatchSummaryModal.value = true;
+            healthAlerts.value.clear();
+          } else if (hadResumeNoList) {
+            // Server says user had resumed but re-check passed → build summary from client-side healthAlerts
+            const failingFromAlerts = [];
+            if (firstBatchAlertServiceName.value) {
+              const report = healthAlerts.value.get(firstBatchAlertServiceName.value);
+              failingFromAlerts.push({
+                serviceName: firstBatchAlertServiceName.value,
+                severity: report?.severity ?? "warning",
+                summary: report?.summary ?? "Health issue was reported during sync (you chose to continue)",
+                issueCount: report?.issues?.length ?? 0,
+                report: report ?? { severity: "warning", summary: "Health issue was reported during sync", issues: [] },
+              });
+            }
+            for (const [name, report] of healthAlerts.value) {
+              if (name !== firstBatchAlertServiceName.value && report) {
+                failingFromAlerts.push({
+                  serviceName: name,
+                  severity: report.severity ?? "warning",
+                  summary: report.summary ?? "Health issue during sync",
+                  issueCount: report.issues?.length ?? 0,
+                  report,
+                });
+              }
+            }
+            // Show even when empty (late summary, healthAlerts already cleared) so user gets at least one report
+            if (failingFromAlerts.length === 0) {
+              failingFromAlerts.push({
+                serviceName: "(previous batch)",
+                severity: "warning",
+                summary: "Health issues were reported during this batch (you chose to continue).",
+                issueCount: 0,
+                report: { severity: "warning", summary: "Health issues were reported during this batch (you chose to continue).", issues: [] },
+              });
+            }
+            lastShownSummaryBatchId.value = summaryBatchId;
+            batchSummaryData.value = {
+              batchId: summaryBatchId,
+              namespace: p?.namespace ?? "",
+              total: p?.total ?? 0,
+              successCount: p?.successCount ?? 0,
+              errorCount: p?.errorCount ?? 0,
+              failingServices: failingFromAlerts,
+            };
+            showBatchSummaryModal.value = true;
+            healthAlerts.value.clear();
+          }
+        }),
+
+        websocketClient.on("BATCH_SYNC_PAUSED", (p) => {
+          console.log("[BATCH_DEBUG] BATCH_SYNC_PAUSED:", p);
+          // Modal should already be showing from POST_SYNC_HEALTH_ALERT
+        }),
+
+        websocketClient.on("BATCH_SYNC_CANCELLED", () => {
+          batchInProgress.value = false;
+          batchId.value = null;
+          batchStopModalAlreadyShownThisBatch.value = false;
+          toast.info("Batch sync was cancelled.");
         }),
       ];
     });
@@ -489,6 +813,9 @@ export default defineComponent({
       serviceNameFilter,
       showOutOfSyncOnly,
       showTestingOnly,
+      healthAlerts,
+      currentHealthAlert,
+      showHealthAlertModal,
       toggleOutOfSyncFilter,
       toggleTestingView,
       filteredProfiles,
@@ -499,6 +826,15 @@ export default defineComponent({
       servicesToSync,
       confirmSyncAll,
       cancelSyncAll,
+      handleBatchStop,
+      handleBatchContinue,
+      batchId,
+      batchInProgress,
+      showBatchStopModal,
+      firstBatchAlertServiceName,
+      showBatchSummaryModal,
+      batchSummaryData,
+      handleDontShowAgain,
     };
   },
 });

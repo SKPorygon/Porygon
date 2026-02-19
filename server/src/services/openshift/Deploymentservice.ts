@@ -206,6 +206,15 @@ export class DeploymentService extends KubernetesClient {
       },
     ];
 
+    // [SYNC_DEBUG] temporary - remove after debugging
+    console.log("[SYNC_DEBUG] DeploymentService.updateImage calling API:", {
+      namespace,
+      deploymentName,
+      containerIndex,
+      newImage,
+      url: `${this.config.clusterUrl}${url}`.slice(0, 80) + "...",
+    });
+
     await axios.patch(`${this.config.clusterUrl}${url}`, patch, {
       headers: {
         Authorization: `Bearer ${this.config.token}`,
@@ -216,6 +225,7 @@ export class DeploymentService extends KubernetesClient {
     console.log(
       `Updated image for deployment "${deploymentName}" to "${newImage}".`,
     );
+    console.log("[SYNC_DEBUG] DeploymentService.updateImage completed");
   }
 
   /** Scale a deployment to a specific number of replicas */
@@ -227,6 +237,14 @@ export class DeploymentService extends KubernetesClient {
     const url = `/apis/apps/v1/namespaces/${namespace}/deployments/${deploymentName}`;
     const patch = [{ op: "replace", path: "/spec/replicas", value: replicas }];
 
+    // [SYNC_DEBUG] temporary - remove after debugging
+    console.log("[SYNC_DEBUG] DeploymentService.scale calling API:", {
+      namespace,
+      deploymentName,
+      replicas,
+      url: `${this.config.clusterUrl}${url}`.slice(0, 80) + "...",
+    });
+
     await axios.patch(`${this.config.clusterUrl}${url}`, patch, {
       headers: {
         Authorization: `Bearer ${this.config.token}`,
@@ -235,6 +253,7 @@ export class DeploymentService extends KubernetesClient {
     });
 
     console.log(`Scaled deployment "${deploymentName}" to ${replicas} replicas.`);
+    console.log("[SYNC_DEBUG] DeploymentService.scale completed");
   }
 
   /** Find the index of a container by name in the deployment spec */
