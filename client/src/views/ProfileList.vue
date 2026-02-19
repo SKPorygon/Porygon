@@ -473,6 +473,16 @@ export default defineComponent({
         desiredPodCount: service.desiredPodCount,
         saToken: profile.saToken,
         clusterUrl: profile.clusterUrl,
+        profileName: profile.name,
+        oldVersion: service.actualVersion,
+        oldPodCount: service.actualPodCount,
+        user: userStore.user
+          ? {
+              id: userStore.user.id,
+              name: userStore.user.name,
+              email: userStore.user.email,
+            }
+          : undefined,
       };
       // [SYNC_DEBUG] temporary - remove after debugging
       console.log("[SYNC_DEBUG] client syncService sending:", {
@@ -552,10 +562,20 @@ export default defineComponent({
             },
             body: JSON.stringify({
               namespace: profile.namespace,
+              profileName: profile.name,
+              user: userStore.user
+                ? {
+                    id: userStore.user.id,
+                    name: userStore.user.name,
+                    email: userStore.user.email,
+                  }
+                : undefined,
               servicesData: targets.map((t) => ({
                 name: t.name,
                 desiredVersion: t.desiredVersion,
                 desiredPodCount: t.desiredPodCount,
+                oldVersion: t.actualVersion,
+                oldPodCount: t.actualPodCount,
               })),
               saToken: profile.saToken,
               clusterUrl: profile.clusterUrl,

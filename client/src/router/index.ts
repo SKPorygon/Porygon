@@ -19,6 +19,8 @@ import Logs from '../views/Logs.vue';
 import BrowseProfiles from '../views/BrowseProfiles.vue';
 // @ts-ignore
 import RequestHistory from '../views/RequestHistory.vue';
+// @ts-ignore
+import SyncLogsPage from '../views/SyncLogsPage.vue';
 
 const routes = [
   { path: '/', name: 'Home', component: Home, meta: {title:"Home", favicon: tabIcon} },
@@ -26,6 +28,7 @@ const routes = [
   { path: "/profiles", name: "ProfileList", component: ProfileList, meta: {title:"Profiles", favicon: tabIcon}},
   { path: "/browse-profiles", name: "BrowseProfiles", component: BrowseProfiles, meta: {title:"Browse Profiles", favicon: tabIcon}},
   { path: "/requests", name: "RequestHistory", component: RequestHistory, meta: {title:"My Requests", favicon: tabIcon}},
+  { path: "/sync-logs", name: "SyncLogs", component: SyncLogsPage, meta: {title:"Sync history", favicon: tabIcon}},
   { path: '/deploy/:profileName', name: 'DeployProfile', component: DeployProfile, meta: {title:"Deploy profile", favicon: tabIcon}},
   { path: '/manage-testing', name: 'manageTesting', component: TestingProfiles, meta: {title:"Manage testing", favicon: tabIcon}},
   { path: '/login', name: 'Login', component: Login, meta: {title:"Log-in", favicon: tabIcon}},

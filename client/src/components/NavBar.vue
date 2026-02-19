@@ -57,6 +57,14 @@
           </router-link>
           <router-link
           v-if="userStore.user"
+            to="/sync-logs"
+            class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition"
+            active-class="bg-blue-700"
+          >
+            Sync history
+          </router-link>
+          <router-link
+          v-if="userStore.user"
             to="/upload"
             class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition"
             active-class="bg-blue-700"

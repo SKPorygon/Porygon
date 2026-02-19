@@ -141,8 +141,15 @@
           :to="`/profiles/logs/${profile._id}`"
           class="btn btn-purple flex items-center justify-center"
         >
-        <i class="fa-regular fa-eye"></i>
+          <i class="fa-regular fa-eye"></i>
           View Activity Logs
+        </router-link>
+        <router-link
+          :to="`/sync-logs?profileName=${encodeURIComponent(profile.name)}`"
+          class="btn bg-gray-600 hover:bg-gray-700 text-white flex items-center justify-center"
+        >
+          <i class="fas fa-history mr-2"></i>
+          Sync history
         </router-link>
       </div>
 
