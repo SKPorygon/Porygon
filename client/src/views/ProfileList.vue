@@ -115,6 +115,15 @@
               </button>
             </div>
           </div>
+          <div class="mt-4 flex flex-wrap items-center gap-4">
+            <label class="text-sm font-medium text-gray-600">Service name:</label>
+            <input
+              v-model="serviceNameFilter"
+              type="text"
+              placeholder="Filter by service name..."
+              class="flex-1 min-w-[200px] pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition text-sm"
+            />
+          </div>
         </div>
 
         <!-- Profiles Grid -->
@@ -181,6 +190,7 @@
                 :key="index"
                 :profile="profile"
                 :show-out-of-sync="showOutOfSyncOnly"
+                :service-name-filter="serviceNameFilter"
                 @sync-all="syncAllServices"
                 @sync-service="syncService"
               />
@@ -223,6 +233,7 @@ export default defineComponent({
     const profiles = ref([]);
     const loading = ref(true);
     const searchQuery = ref("");
+    const serviceNameFilter = ref("");
     const showOutOfSyncOnly = ref(false);
     const showTestingOnly = ref(false);
     const userStore = useUserStore();
@@ -301,6 +312,15 @@ export default defineComponent({
             ),
           }))
           .filter((profile) => profile.services.length > 0);
+      }
+
+      if (serviceNameFilter.value.trim()) {
+        const q = serviceNameFilter.value.trim().toLowerCase();
+        result = result.filter((profile) =>
+          (profile.services || []).some((s) =>
+            (s.name || "").toLowerCase().includes(q)
+          )
+        );
       }
 
       return result;
@@ -466,6 +486,7 @@ export default defineComponent({
       profiles,
       loading,
       searchQuery,
+      serviceNameFilter,
       showOutOfSyncOnly,
       showTestingOnly,
       toggleOutOfSyncFilter,

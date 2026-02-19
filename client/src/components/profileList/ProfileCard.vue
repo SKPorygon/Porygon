@@ -157,6 +157,10 @@ export default {
       type: Object,
       required: true,
     },
+    serviceNameFilter: {
+      type: String,
+      default: "",
+    },
   },
   setup(props) {
     const showDetails = ref(false);
@@ -185,10 +189,19 @@ export default {
     });
 
     const filteredServices = computed(() => {
-      if (!selectedAppFilter.value) return props.profile.services || [];
-      return (props.profile.services || []).filter(
-        (s) => (s.appGroup || STANDALONE_APP_GROUP) === selectedAppFilter.value
-      );
+      let list = props.profile.services || [];
+      if (selectedAppFilter.value) {
+        list = list.filter(
+          (s) => (s.appGroup || STANDALONE_APP_GROUP) === selectedAppFilter.value
+        );
+      }
+      const nameQ = (props.serviceNameFilter || "").trim().toLowerCase();
+      if (nameQ) {
+        list = list.filter((s) =>
+          (s.name || "").toLowerCase().includes(nameQ)
+        );
+      }
+      return list;
     });
 
     const toggleDetails = () => {
