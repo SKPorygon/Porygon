@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: busybox
+  name: chigga
 spec:
   selector:
     app: busybox

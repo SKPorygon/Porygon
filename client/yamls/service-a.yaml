@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: busybox
+  name: chigga
   labels:
     app: busybox
 spec:
@@ -17,7 +17,7 @@ spec:
     spec:
       serviceAccountName: porygon-sa
       containers:
-      - name: busybox
+      - name: chigga
         image: busybox:1.34.1
         command: ["sh", "-c", "while true; do echo 'Service A Running'; sleep 3600; done"]
         ports:
