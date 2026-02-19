@@ -30,6 +30,25 @@
           </router-link>
           <router-link
           v-if="userStore.user"
+            to="/browse-profiles"
+            class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition"
+            active-class="bg-blue-700"
+          >
+            Browse Profiles
+          </router-link>
+          <router-link
+          v-if="userStore.user"
+            to="/requests"
+            class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition relative"
+            active-class="bg-blue-700"
+          >
+            My Requests
+            <span v-if="pendingRequestsCount > 0" class="absolute -top-1 -right-1 bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              {{ pendingRequestsCount > 9 ? '9+' : pendingRequestsCount }}
+            </span>
+          </router-link>
+          <router-link
+          v-if="userStore.user"
             to="/manage-testing"
             class="px-3 py-1 text-sm font-medium rounded-md hover:bg-blue-600 transition"
             active-class="bg-blue-700"
@@ -107,19 +126,58 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref } from "vue";
+import { defineComponent, ref, onMounted, onBeforeUnmount } from "vue";
 import { useUserStore } from "../store/userStore";
+import { getConfig } from "../config";
 
 export default defineComponent({
   setup() {
     const isMenuOpen = ref(false);
     const userStore = useUserStore();
+    const pendingRequestsCount = ref(0);
+    let intervalId: number | null = null;
 
     const toggleMenu = () => {
       isMenuOpen.value = !isMenuOpen.value;
     };
 
-    return { isMenuOpen, toggleMenu, userStore };
+    const fetchPendingRequestsCount = async () => {
+      if (!userStore.user || !userStore.token) return;
+      
+      try {
+        const response = await fetch(
+          `http://${getConfig().urlHost}/api/profiles/requests/history`,
+          {
+            headers: {
+              Authorization: `Bearer ${userStore.token}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const requests = await response.json();
+          pendingRequestsCount.value = requests.filter(
+            (req: any) => req.status === "pending"
+          ).length;
+        }
+      } catch (error) {
+        console.error("Error fetching pending requests count:", error);
+      }
+    };
+
+    onMounted(() => {
+      fetchPendingRequestsCount();
+      // Refresh every 30 seconds
+      intervalId = window.setInterval(fetchPendingRequestsCount, 30000);
+    });
+
+    onBeforeUnmount(() => {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+      }
+    });
+
+    return { isMenuOpen, toggleMenu, userStore, pendingRequestsCount };
   },
   methods: {
     logoutUser() {
