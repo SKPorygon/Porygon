@@ -1,7 +1,10 @@
 import WebSocketManager from "../websockets/websocketServer";
 import { KubernetesConfig } from "../clients/KubernetesClient";
 import { AuthorizationService } from "../services/openshift/AuthorizationService";
-import { DeploymentService } from "../services/openshift/DeploymentService";
+import {
+  DeploymentService,
+  DeploymentInfo,
+} from "../services/openshift/DeploymentService";
 import { PodService } from "../services/openshift/PodService";
 import { ServiceSyncOrchestrator } from "../services/openshift/ServiceSyncOrchestrator";
 import { NamespaceAccessCoordinator } from "../services/openshift/NamespaceAccessCoordinator";
@@ -33,7 +36,7 @@ export class OpenShiftService {
     namespace: string,
     saToken: string,
     clusterUrl: string
-  ): Promise<Record<string, { version: string; podCount: number }>> {
+  ): Promise<Record<string, DeploymentInfo>> {
     const config: KubernetesConfig = { token: saToken, clusterUrl };
     const deploymentService = new DeploymentService(config);
     return deploymentService.getVersionsAndPodCounts(namespace);

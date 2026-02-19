@@ -64,14 +64,34 @@
       </div>
     </div>
 
-    <!-- Service Table -->
-    <ServiceTable
-      v-if="showDetails"
-      :services="profile.services"
-      :testing-profiles="profile.testingProfiles"
-      @sync-service="$emit('sync-service', profile, $event)"
-      class="transition-all duration-300 ease-in-out"
-    />
+    <!-- App filter + Service Table -->
+    <div v-if="showDetails" class="px-6 pb-4">
+      <div
+        v-if="appGroups.length > 1"
+        class="mb-4 flex flex-wrap items-center gap-2"
+      >
+        <label class="text-sm font-medium text-gray-600">Show app:</label>
+        <select
+          v-model="selectedAppFilter"
+          class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">All apps</option>
+          <option
+            v-for="opt in appGroupOptions"
+            :key="opt.value"
+            :value="opt.value"
+          >
+            {{ opt.label }}
+          </option>
+        </select>
+      </div>
+      <ServiceTable
+        :services="filteredServices"
+        :testing-profiles="profile.testingProfiles"
+        @sync-service="$emit('sync-service', profile, $event)"
+        class="transition-all duration-300 ease-in-out"
+      />
+    </div>
 
     <!-- Action Buttons -->
     <div
@@ -141,7 +161,35 @@ export default {
   setup(props) {
     const showDetails = ref(false);
     const showPermissionsModal = ref(false);
+    const selectedAppFilter = ref("");
     const userStore = useUserStore();
+
+    const STANDALONE_APP_GROUP = "__standalone__";
+
+    const appGroups = computed(() => {
+      const set = new Set();
+      for (const s of props.profile.services || []) {
+        set.add(s.appGroup || STANDALONE_APP_GROUP);
+      }
+      return [...set];
+    });
+
+    const appGroupOptions = computed(() => {
+      return appGroups.value.map((value) => ({
+        value: value === STANDALONE_APP_GROUP ? STANDALONE_APP_GROUP : value,
+        label:
+          value === STANDALONE_APP_GROUP
+            ? "Standalone (no app label)"
+            : value,
+      }));
+    });
+
+    const filteredServices = computed(() => {
+      if (!selectedAppFilter.value) return props.profile.services || [];
+      return (props.profile.services || []).filter(
+        (s) => (s.appGroup || STANDALONE_APP_GROUP) === selectedAppFilter.value
+      );
+    });
 
     const toggleDetails = () => {
       showDetails.value = !showDetails.value;
@@ -172,6 +220,10 @@ export default {
       openPermissionsModal,
       outOfSyncCount,
       canUserEditProfile,
+      selectedAppFilter,
+      appGroups,
+      appGroupOptions,
+      filteredServices,
     };
   },
 };

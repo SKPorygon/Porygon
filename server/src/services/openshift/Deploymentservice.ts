@@ -32,6 +32,8 @@ export interface DeploymentInfo {
   name: string;
   version: string;
   podCount: number;
+  /** OpenShift/Kubernetes app grouping label (app.kubernetes.io/part-of, app.kubernetes.io/name, or app). Empty if none. */
+  appGroup: string;
 }
 
 interface Container {
@@ -69,6 +71,7 @@ interface DeploymentSpec {
   metadata: {
     name: string;
     generation?: number;
+    labels?: Record<string, string>;
   };
 }
 
@@ -105,6 +108,18 @@ const describeProgress = (deployment: DeploymentSpec) => {
     unavailable: st.unavailableReplicas ?? 0,
   };
 };
+
+/** Get app group from deployment labels (OpenShift/Kubernetes app grouping) */
+function getAppGroupFromDeployment(deployment: DeploymentSpec): string {
+  const labels = deployment?.metadata?.labels ?? {};
+  const partOf = labels["app.kubernetes.io/part-of"];
+  if (partOf) return partOf;
+  const appName = labels["app.kubernetes.io/name"];
+  if (appName) return appName;
+  const app = labels["app"];
+  if (app) return app;
+  return "";
+}
 
 /**
  * Manages Kubernetes Deployments
@@ -150,7 +165,6 @@ export class DeploymentService extends KubernetesClient {
       const version =
         image === "unknown" ? "unknown" : ImageParser.extractTag(image);
 
-      // Prefer readyReplicas (actual running+ready pods)
       const ready = deployment?.status?.readyReplicas;
       const available = deployment?.status?.availableReplicas;
 
@@ -161,14 +175,18 @@ export class DeploymentService extends KubernetesClient {
             ? available
             : 0;
 
+      const appGroupRaw = getAppGroupFromDeployment(deployment);
+      const appGroup = appGroupRaw || "__standalone__";
+
       versions[deploymentName] = {
         name: deploymentName,
         version,
         podCount,
+        appGroup,
       };
     }
 
-    console.log("Computed deployment versions and pod counts:", versions);
+    console.log("Computed deployment versions, pod counts and app groups:", versions);
     return versions;
   }
 
