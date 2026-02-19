@@ -16,7 +16,7 @@
             </span>
             <span class="text-gray-500 text-sm">
               <i class="fas fa-cubes mr-1"></i>
-              Services: {{ profile.services.length }}
+              Services: {{ filteredServices.length }}{{ serviceFilter ? ` (filtered from ${profile.services.length})` : '' }}
             </span>
           </div>
         </div>
@@ -64,10 +64,31 @@
       </div>
     </div>
 
+    <!-- Service Filter Info -->
+    <div v-if="showDetails && serviceFilter && filteredServices.length === 0" class="px-6 py-4 bg-amber-50 border-b border-amber-200">
+      <p class="text-amber-800 text-sm flex items-center">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5 mr-2"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+          />
+        </svg>
+        No services found matching "{{ serviceFilter }}"
+      </p>
+    </div>
+
     <!-- Service Table -->
     <ServiceTable
-      v-if="showDetails"
-      :services="profile.services"
+      v-if="showDetails && filteredServices.length > 0"
+      :services="filteredServices"
       :testing-profiles="profile.testingProfiles"
       @sync-service="$emit('sync-service', profile, $event)"
       class="transition-all duration-300 ease-in-out"
@@ -137,6 +158,10 @@ export default {
       type: Object,
       required: true,
     },
+    serviceFilter: {
+      type: String,
+      default: "",
+    },
   },
   setup(props) {
     const showDetails = ref(false);
@@ -159,8 +184,18 @@ export default {
       return userPermissions.role !== "viewer";
     };
 
+    const filteredServices = computed(() => {
+      if (!props.serviceFilter) {
+        return props.profile.services;
+      }
+      const filter = props.serviceFilter.toLowerCase();
+      return props.profile.services.filter((service) =>
+        service.name.toLowerCase().includes(filter)
+      );
+    });
+
     const outOfSyncCount = computed(() => {
-      return props.profile.services.filter(
+      return filteredServices.value.filter(
         (service) => service.status === "Out of Sync"
       ).length;
     });
@@ -170,6 +205,7 @@ export default {
       toggleDetails,
       showPermissionsModal,
       openPermissionsModal,
+      filteredServices,
       outOfSyncCount,
       canUserEditProfile,
     };

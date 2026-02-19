@@ -12,6 +12,7 @@ export const createFullyUpdatedProfile = async (profile: IProfile) => {
     const actualInfo = actualData[service.name] || {
       version: "unknown",
       podCount: 0,
+      appGroup: service.name,
     };
 
     const isPodCountInSync = actualInfo.podCount === (service.podCount || 1); // Default desired pod count is 1
@@ -30,6 +31,7 @@ export const createFullyUpdatedProfile = async (profile: IProfile) => {
       testGroupId: service.testGroupId,
       note: service.note,
       status,
+      appGroup: actualInfo.appGroup ?? service.name,
     };
   });
 

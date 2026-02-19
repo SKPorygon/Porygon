@@ -55,11 +55,26 @@ const extractTagFromImage = (image: string): string => {
   return withoutDigest.slice(lastColon + 1);
 };
 
+/** Get app group from deployment labels (OpenShift/Kubernetes app grouping) */
+function getAppGroupFromDeployment(deployment: any): string {
+  const labels = deployment?.metadata?.labels ?? {};
+  // app.kubernetes.io/part-of = parent application (preferred for grouping)
+  const partOf = labels["app.kubernetes.io/part-of"];
+  if (partOf) return partOf;
+  // app.kubernetes.io/name = application name
+  const appName = labels["app.kubernetes.io/name"];
+  if (appName) return appName;
+  // Fallback: use "app" label if it looks like a group (e.g. same for multiple deployments)
+  const app = labels["app"];
+  if (app) return app;
+  return "";
+}
+
 export const getServicesActualVersions = async (
   namespace: string,
   saToken: string,
   clusterUrl: string
-): Promise<Record<string, { version: string; podCount: number }>> => {
+): Promise<Record<string, { version: string; podCount: number; appGroup: string }>> => {
   console.log("Fetching actual versions for namespace:", namespace);
 
   // Fetch deployments (source of truth)
@@ -80,7 +95,7 @@ export const getServicesActualVersions = async (
 
   const deploymentData = await deploymentResponse.json();
 
-  const versions: Record<string, { version: string; podCount: number }> = {};
+  const versions: Record<string, { version: string; podCount: number; appGroup: string }> = {};
 
   for (const deployment of deploymentData.items ?? []) {
     const deploymentName = deployment?.metadata?.name;
@@ -102,10 +117,12 @@ export const getServicesActualVersions = async (
         ? available
         : 0;
 
-    versions[deploymentName] = { version, podCount };
+    const appGroup = getAppGroupFromDeployment(deployment) || deploymentName;
+
+    versions[deploymentName] = { version, podCount, appGroup };
   }
 
-  console.log("Computed deployment versions and pod counts:", versions);
+  console.log("Computed deployment versions, pod counts and app groups:", versions);
   return versions;
 };
 
